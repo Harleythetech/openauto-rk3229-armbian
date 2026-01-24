@@ -55,11 +55,10 @@
 #ifdef USE_KMSSINK
 
 // GStreamer includes
-extern "C"
-{
+// Note: GStreamer headers already have proper C++ guards internally,
+// so we do NOT wrap them in extern "C" - doing so breaks C++ template includes
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
-}
 
 // Standard library includes
 #include <cstring>
