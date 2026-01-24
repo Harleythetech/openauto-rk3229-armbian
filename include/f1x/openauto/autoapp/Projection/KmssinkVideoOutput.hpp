@@ -36,12 +36,10 @@
 // Compile-time feature flag for KMS sink support
 #ifdef USE_KMSSINK
 
-// GStreamer includes - must be included before other headers to avoid conflicts
-extern "C"
-{
+// GStreamer includes - GStreamer headers already have proper C++ guards internally,
+// so we do NOT wrap them in extern "C" - doing so breaks C++ template includes
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
-}
 
 #include <mutex>
 #include <atomic>
@@ -202,11 +200,12 @@ namespace f1x
                     uint64_t frameCount_;
 
                     // GStreamer pipeline and elements
-                    GstElement *pipeline_;  ///< Main GStreamer pipeline
-                    GstElement *appsrc_;    ///< Application source for feeding H.264 data
-                    GstElement *h264parse_; ///< H.264 bitstream parser
-                    GstElement *decoder_;   ///< V4L2 stateless H.264 decoder
-                    GstElement *kmssink_;   ///< KMS/DRM video sink
+                    GstElement *pipeline_;     ///< Main GStreamer pipeline
+                    GstElement *appsrc_;       ///< Application source for feeding H.264 data
+                    GstElement *h264parse_;    ///< H.264 bitstream parser
+                    GstElement *decoder_;      ///< V4L2 stateless H.264 decoder
+                    GstElement *videoconvert_; ///< Video format converter
+                    GstElement *kmssink_;      ///< KMS/DRM video sink
 
                     // Optional: DRM connector and plane IDs (0 = auto-detect)
                     int connectorId_;
