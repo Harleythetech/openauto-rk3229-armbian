@@ -912,7 +912,7 @@ namespace f1x
                     OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Initializing DRM hardware cursor";
 
                     // Open DRM device
-                    drmFd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+                    drmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
                     if (drmFd_ < 0)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to open /dev/dri/card0 for cursor";
@@ -924,7 +924,7 @@ namespace f1x
                     if (!resources)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to get DRM resources for cursor";
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                         return false;
                     }
@@ -939,7 +939,7 @@ namespace f1x
                     if (cursorCrtcId_ == 0)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] No CRTC found for cursor";
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                         return false;
                     }
@@ -957,7 +957,7 @@ namespace f1x
                     if (ioctl(drmFd_, DRM_IOCTL_MODE_CREATE_DUMB, &createReq) < 0)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to create cursor buffer";
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                         return false;
                     }
@@ -971,7 +971,7 @@ namespace f1x
                     if (ioctl(drmFd_, DRM_IOCTL_MODE_MAP_DUMB, &mapReq) < 0)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to map cursor buffer";
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                         return false;
                     }
@@ -980,7 +980,7 @@ namespace f1x
                     if (cursorData == MAP_FAILED)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to mmap cursor buffer";
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                         return false;
                     }
@@ -1023,7 +1023,7 @@ namespace f1x
                                       handles, strides, offsets, &cursorFbId_, 0) != 0)
                     {
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to create cursor framebuffer";
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                         return false;
                     }
@@ -1069,7 +1069,7 @@ namespace f1x
                             cursorBufferHandle_ = 0;
                         }
 
-                        close(drmFd_);
+                        ::close(drmFd_);
                         drmFd_ = -1;
                     }
 
