@@ -404,33 +404,44 @@ namespace f1x
                     {
                         g_object_set(G_OBJECT(kmssink_), "connector-id", connectorId_, nullptr);
                         OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using connector-id: " << connectorId_;
-                        // init() - Start the GStreamer pipeline
-                        // ============================================================================
+                    }
 
-                        bool KmssinkVideoOutput::init()
-                        {
-                            std::lock_guard<decltype(mutex_)> lock(mutex_);
+                    // Note: To find available connectors and planes, run:
+                    // modetest -M <drm-device> -c (for connectors)
+                    // modetest -M <drm-device> -p (for planes)
 
-                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] init() - Starting pipeline, isActive: " << isActive_.load();
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] kmssink configured successfully";
+                    return true;
+                }
 
-                            if (!pipeline_)
-                            {
-                                OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Cannot init - pipeline not created";
-                                return false;
-                            }
+                // ============================================================================
+                // init() - Start the GStreamer pipeline
+                // ============================================================================
 
-                            if (isActive_.load())
-                            {
-                                OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Pipeline already active";
-                                return true;
-                            }
+                bool KmssinkVideoOutput::init()
+                {
+                    std::lock_guard<decltype(mutex_)> lock(mutex_);
 
-                            // Set up bus watch for error messages
-                            GstBus *bus = gst_element_get_bus(pipeline_);
-                            if (bus)
-                            {
-                                gst_bus_add_watch(bus, [](GstBus *bus, GstMessage *msg, gpointer user_data) -> gboolean
-                                                  {
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] init() - Starting pipeline, isActive: " << isActive_.load();
+
+                    if (!pipeline_)
+                    {
+                        OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Cannot init - pipeline not created";
+                        return false;
+                    }
+
+                    if (isActive_.load())
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Pipeline already active";
+                        return true;
+                    }
+
+                    // Set up bus watch for error messages
+                    GstBus *bus = gst_element_get_bus(pipeline_);
+                    if (bus)
+                    {
+                        gst_bus_add_watch(bus, [](GstBus *bus, GstMessage *msg, gpointer user_data) -> gboolean
+                                          {
                             switch (GST_MESSAGE_TYPE(msg)) {
                                 case GST_MESSAGE_ERROR: {
                                     GError *err = nullptr;
@@ -467,309 +478,354 @@ namespace f1x
                                     break;
                             }
                             return TRUE; }, pipeline_);
-                                gst_object_unref(bus);
-                            }
+                        gst_object_unref(bus);
+                    }
 
-                            // Transition pipeline to PLAYING state
-                            // ----------------------------------------------------------------
-                            GstStateChangeReturn ret = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+                    // Transition pipeline to PLAYING state
+                    // ----------------------------------------------------------------
+                    GstStateChangeReturn ret = gst_element_set_state(pipeline_, GST_STATE_PLAYING);
 
-                            if (ret == GST_STATE_CHANGE_FAILURE)
+                    if (ret == GST_STATE_CHANGE_FAILURE)
+                    {
+                        OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to set pipeline to PLAYING state";
+
+                        // Get more detailed error information
+                        GstBus *bus = gst_element_get_bus(pipeline_);
+                        if (bus)
+                        {
+                            GstMessage *msg = gst_bus_poll(bus, GST_MESSAGE_ERROR, 0);
+                            if (msg)
                             {
-                                OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to set pipeline to PLAYING state";
+                                GError *err = nullptr;
+                                gchar *debug = nullptr;
+                                gst_message_parse_error(msg, &err, &debug);
+                                OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Pipeline error: "
+                                                    << (err ? err->message : "Unknown");
+                                if (debug)
+                                    OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Debug: " << debug;
+                                if (err)
+                                    g_error_free(err);
+                                g_free(debug);
+                                gst_message_unref(msg);
+                            }
+                            gst_object_unref(bus);
+                        }
+                        return false;
+                    }
 
-                                // Get more detailed error information
-                                GstBus *bus = gst_element_get_bus(pipeline_);
-                                if (bus)
+                    // Mark pipeline as active
+                    isActive_.store(true);
+                    frameCount_ = 0;
+
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Pipeline started successfully (state change: "
+                                       << (ret == GST_STATE_CHANGE_SUCCESS ? "SUCCESS" : ret == GST_STATE_CHANGE_ASYNC ? "ASYNC"
+                                                                                                                       : "NO_PREROLL")
+                                       << ")";
+
+                    return true;
+                }
+
+                // ============================================================================
+                // write() - Push H.264 frame data to the pipeline
+                // ============================================================================
+
+                void KmssinkVideoOutput::write(uint64_t timestamp, const aasdk::common::DataConstBuffer &buffer)
+                {
+                    std::lock_guard<decltype(mutex_)> lock(mutex_);
+
+                    // Check if pipeline is active
+                    if (!isActive_.load() || !appsrc_)
+                    {
+                        return;
+                    }
+
+                    // Validate buffer
+                    if (buffer.size == 0 || buffer.cdata == nullptr)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Received empty buffer, skipping";
+                        return;
+                    }
+
+                    // Log first 5 frames for debugging
+                    if (frameCount_ < 5)
+                    {
+                        OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Frame " << frameCount_
+                                           << " - size: " << buffer.size << " bytes, timestamp: " << timestamp;
+                    }
+
+                    // Create a GstBuffer to hold the frame data
+                    // ----------------------------------------------------------------
+                    GstBuffer *gstBuffer = gst_buffer_new_allocate(nullptr, buffer.size, nullptr);
+                    if (!gstBuffer)
+                    {
+                        OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to allocate GstBuffer";
+                        return;
+                    }
+
+                    // Copy frame data into the GstBuffer
+                    // ----------------------------------------------------------------
+                    GstMapInfo map;
+                    if (gst_buffer_map(gstBuffer, &map, GST_MAP_WRITE))
+                    {
+                        memcpy(map.data, buffer.cdata, buffer.size);
+                        gst_buffer_unmap(gstBuffer, &map);
+                    }
+                    else
+                    {
+                        OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to map GstBuffer for writing";
+                        gst_buffer_unref(gstBuffer);
+                        return;
+                    }
+
+                    // Set buffer timestamps
+                    // ----------------------------------------------------------------
+                    // PTS (Presentation Time Stamp): When this frame should be displayed
+                    // Android Auto provides timestamps in nanoseconds
+                    GST_BUFFER_PTS(gstBuffer) = timestamp;
+
+                    // DTS (Decode Time Stamp): For H.264 with B-frames, DTS != PTS
+                    // For Android Auto streams (typically no B-frames), DTS = PTS
+                    GST_BUFFER_DTS(gstBuffer) = timestamp;
+
+                    // Duration: We don't have exact duration, let downstream elements calculate
+                    GST_BUFFER_DURATION(gstBuffer) = GST_CLOCK_TIME_NONE;
+
+                    // Push the buffer into appsrc
+                    // ----------------------------------------------------------------
+                    GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_), gstBuffer);
+                    // Note: gst_app_src_push_buffer takes ownership of the buffer, don't unref
+
+                    if (ret != GST_FLOW_OK)
+                    {
+                        if (ret == GST_FLOW_FLUSHING)
+                        {
+                            OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Pipeline flushing, buffer dropped";
+                        }
+                        else if (ret == GST_FLOW_EOS)
+                        {
+                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Pipeline at EOS";
+                        }
+                        else
+                        {
+                            OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to push buffer, flow return: " << ret;
+                        }
+                        return;
+                    }
+
+                    // Update frame counter and log periodically
+                    frameCount_++;
+                    if (frameCount_ % 300 == 0) // Log every ~10 seconds at 30fps
+                    {
+                        OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Processed " << frameCount_
+                                           << " frames, buffer size: " << buffer.size << " bytes";
+                    }
+
+                    // Synchronously poll for any pipeline errors (since we don't have a GLib main loop)
+                    if (pipeline_ && (frameCount_ % 30 == 1)) // Check every second at 30fps
+                    {
+                        GstBus *bus = gst_element_get_bus(pipeline_);
+                        if (bus)
+                        {
+                            GstMessage *msg = nullptr;
+                            while ((msg = gst_bus_pop_filtered(bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_WARNING))) != nullptr)
+                            {
+                                if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR)
                                 {
-                                    GstMessage *msg = gst_bus_poll(bus, GST_MESSAGE_ERROR, 0);
-                                    if (msg)
-                                    {
-                                        GError *err = nullptr;
-                                        gchar *debug = nullptr;
-                                        gst_message_parse_error(msg, &err, &debug);
-                                        OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Pipeline error: "
-                                                            << (err ? err->message : "Unknown");
-                                        if (debug)
-                                            OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Debug: " << debug;
-                                        if (err)
-                                            g_error_free(err);
-                                        g_free(debug);
-                                        gst_message_unref(msg);
-                                    }
-                                    gst_object_unref(bus);
+                                    GError *err = nullptr;
+                                    gchar *debug = nullptr;
+                                    gst_message_parse_error(msg, &err, &debug);
+                                    OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Pipeline ERROR: "
+                                                        << (err ? err->message : "Unknown")
+                                                        << " - Debug: " << (debug ? debug : "none");
+                                    if (err)
+                                        g_error_free(err);
+                                    g_free(debug);
                                 }
-                                return false;
-                            }
-
-                            // Mark pipeline as active
-                            isActive_.store(true);
-                            frameCount_ = 0;
-
-                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Pipeline started successfully (state change: "
-                                               << (ret == GST_STATE_CHANGE_SUCCESS ? "SUCCESS" : ret == GST_STATE_CHANGE_ASYNC ? "ASYNC"
-                                                                                                                               : "NO_PREROLL")
-                                               << ")";
-
-                            return true;
-                        }
-
-                        // ============================================================================
-                        // write() - Push H.264 frame data to the pipeline
-                        // ============================================================================
-
-                        void KmssinkVideoOutput::write(uint64_t timestamp, const aasdk::common::DataConstBuffer &buffer)
-                        {
-                            std::lock_guard<decltype(mutex_)> lock(mutex_);
-
-                            // Check if pipeline is active
-                            if (!isActive_.load() || !appsrc_)
-                            {
-                                return;
-                            }
-
-                            // Validate buffer
-                            if (buffer.size == 0 || buffer.cdata == nullptr)
-                            {
-                                OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Received empty buffer, skipping";
-                                return;
-                            }
-
-                            // Create a GstBuffer to hold the frame data
-                            // ----------------------------------------------------------------
-                            GstBuffer *gstBuffer = gst_buffer_new_allocate(nullptr, buffer.size, nullptr);
-                            if (!gstBuffer)
-                            {
-                                OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to allocate GstBuffer";
-                                return;
-                            }
-
-                            // Copy frame data into the GstBuffer
-                            // ----------------------------------------------------------------
-                            GstMapInfo map;
-                            if (gst_buffer_map(gstBuffer, &map, GST_MAP_WRITE))
-                            {
-                                memcpy(map.data, buffer.cdata, buffer.size);
-                                gst_buffer_unmap(gstBuffer, &map);
-                            }
-                            else
-                            {
-                                OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to map GstBuffer for writing";
-                                gst_buffer_unref(gstBuffer);
-                                return;
-                            }
-
-                            // Set buffer timestamps
-                            // ----------------------------------------------------------------
-                            // PTS (Presentation Time Stamp): When this frame should be displayed
-                            // Android Auto provides timestamps in nanoseconds
-                            GST_BUFFER_PTS(gstBuffer) = timestamp;
-
-                            // DTS (Decode Time Stamp): For H.264 with B-frames, DTS != PTS
-                            // For Android Auto streams (typically no B-frames), DTS = PTS
-                            GST_BUFFER_DTS(gstBuffer) = timestamp;
-
-                            // Duration: We don't have exact duration, let downstream elements calculate
-                            GST_BUFFER_DURATION(gstBuffer) = GST_CLOCK_TIME_NONE;
-
-                            // Push the buffer into appsrc
-                            // ----------------------------------------------------------------
-                            GstFlowReturn ret = gst_app_src_push_buffer(GST_APP_SRC(appsrc_), gstBuffer);
-                            // Note: gst_app_src_push_buffer takes ownership of the buffer, don't unref
-
-                            if (ret != GST_FLOW_OK)
-                            {
-                                if (ret == GST_FLOW_FLUSHING)
+                                else if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_WARNING)
                                 {
-                                    OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Pipeline flushing, buffer dropped";
+                                    GError *err = nullptr;
+                                    gchar *debug = nullptr;
+                                    gst_message_parse_warning(msg, &err, &debug);
+                                    OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Pipeline WARNING: "
+                                                          << (err ? err->message : "Unknown");
+                                    if (err)
+                                        g_error_free(err);
+                                    g_free(debug);
                                 }
-                                else if (ret == GST_FLOW_EOS)
+                                gst_message_unref(msg);
+                            }
+                            gst_object_unref(bus);
+                        }
+                    }
+                }
+
+                // ============================================================================
+                // renderFrame() - Alternative interface for rendering frames
+                // ============================================================================
+
+                bool KmssinkVideoOutput::renderFrame(const uint8_t *frameData, size_t frameSize, uint64_t timestamp)
+                {
+                    // Create a DataConstBuffer wrapper and delegate to write()
+                    // ----------------------------------------------------------------
+                    if (!frameData || frameSize == 0)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] renderFrame called with invalid data";
+                        return false;
+                    }
+
+                    // Create a const buffer wrapper for the frame data
+                    aasdk::common::DataConstBuffer buffer(frameData, frameSize);
+
+                    // Delegate to the main write method
+                    write(timestamp, buffer);
+
+                    // Check if pipeline is still active (write succeeded)
+                    return isActive_.load();
+                }
+
+                // ============================================================================
+                // stop() - Stop the pipeline and release resources
+                // ============================================================================
+
+                void KmssinkVideoOutput::stop()
+                {
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] stop() called";
+
+                    std::lock_guard<decltype(mutex_)> lock(mutex_);
+
+                    if (!isActive_.load() && !pipeline_)
+                    {
+                        OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Already stopped";
+                        return;
+                    }
+
+                    isActive_.store(false);
+
+                    // Send End-Of-Stream to allow graceful shutdown
+                    // ----------------------------------------------------------------
+                    if (appsrc_)
+                    {
+                        OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Sending EOS to pipeline";
+                        gst_app_src_end_of_stream(GST_APP_SRC(appsrc_));
+                    }
+
+                    // Give the pipeline a moment to process EOS
+                    if (pipeline_)
+                    {
+                        GstBus *bus = gst_element_get_bus(pipeline_);
+                        if (bus)
+                        {
+                            // Wait up to 1 second for EOS message
+                            GstMessage *msg = gst_bus_timed_pop_filtered(
+                                bus,
+                                GST_SECOND, // 1 second timeout
+                                static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
+                            if (msg)
+                            {
+                                if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR)
                                 {
-                                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Pipeline at EOS";
+                                    GError *err = nullptr;
+                                    gst_message_parse_error(msg, &err, nullptr);
+                                    OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Error during shutdown: "
+                                                          << (err ? err->message : "Unknown");
+                                    if (err)
+                                        g_error_free(err);
                                 }
-                                else
-                                {
-                                    OPENAUTO_LOG(error) << "[KmssinkVideoOutput] Failed to push buffer, flow return: " << ret;
-                                }
-                                return;
+                                gst_message_unref(msg);
                             }
-
-                            // Update frame counter and log periodically
-                            frameCount_++;
-                            if (frameCount_ % 300 == 0) // Log every ~10 seconds at 30fps
-                            {
-                                OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Processed " << frameCount_
-                                                    << " frames, buffer size: " << buffer.size << " bytes";
-                            }
+                            gst_object_unref(bus);
                         }
+                    }
 
-                        // ============================================================================
-                        // renderFrame() - Alternative interface for rendering frames
-                        // ============================================================================
+                    // Release all pipeline resources
+                    releasePipeline();
 
-                        bool KmssinkVideoOutput::renderFrame(const uint8_t *frameData, size_t frameSize, uint64_t timestamp)
-                        {
-                            // Create a DataConstBuffer wrapper and delegate to write()
-                            // ----------------------------------------------------------------
-                            if (!frameData || frameSize == 0)
-                            {
-                                OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] renderFrame called with invalid data";
-                                return false;
-                            }
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Stopped. Total frames processed: " << frameCount_;
+                }
 
-                            // Create a const buffer wrapper for the frame data
-                            aasdk::common::DataConstBuffer buffer(frameData, frameSize);
+                // ============================================================================
+                // releasePipeline() - Clean up GStreamer resources
+                // ============================================================================
 
-                            // Delegate to the main write method
-                            write(timestamp, buffer);
+                void KmssinkVideoOutput::releasePipeline()
+                {
+                    if (pipeline_)
+                    {
+                        OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Setting pipeline to NULL state";
 
-                            // Check if pipeline is still active (write succeeded)
-                            return isActive_.load();
-                        }
+                        // Set pipeline to NULL state (releases all resources)
+                        gst_element_set_state(pipeline_, GST_STATE_NULL);
 
-                        // ============================================================================
-                        // stop() - Stop the pipeline and release resources
-                        // ============================================================================
+                        // Wait for state change to complete
+                        GstState state, pending;
+                        gst_element_get_state(pipeline_, &state, &pending, GST_SECOND);
 
-                        void KmssinkVideoOutput::stop()
-                        {
-                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] stop() called";
+                        // Unref the pipeline (this also unrefs all elements added to it)
+                        gst_object_unref(GST_OBJECT(pipeline_));
+                        pipeline_ = nullptr;
 
-                            std::lock_guard<decltype(mutex_)> lock(mutex_);
+                        OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Pipeline resources released";
+                    }
 
-                            if (!isActive_.load() && !pipeline_)
-                            {
-                                OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Already stopped";
-                                return;
-                            }
+                    // Clear element pointers (they were owned by the pipeline)
+                    appsrc_ = nullptr;
+                    h264parse_ = nullptr;
+                    decoder_ = nullptr;
+                    videoconvert_ = nullptr;
+                    kmssink_ = nullptr;
+                }
 
-                            isActive_.store(false);
+                // ============================================================================
+                // getVideoWidth() - Get video width from configuration
+                // ============================================================================
 
-                            // Send End-Of-Stream to allow graceful shutdown
-                            // ----------------------------------------------------------------
-                            if (appsrc_)
-                            {
-                                OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Sending EOS to pipeline";
-                                gst_app_src_end_of_stream(GST_APP_SRC(appsrc_));
-                            }
+                int KmssinkVideoOutput::getVideoWidth() const
+                {
+                    // Get resolution from configuration and return appropriate width
+                    // ----------------------------------------------------------------
+                    auto resolution = configuration_->getVideoResolution();
 
-                            // Give the pipeline a moment to process EOS
-                            if (pipeline_)
-                            {
-                                GstBus *bus = gst_element_get_bus(pipeline_);
-                                if (bus)
-                                {
-                                    // Wait up to 1 second for EOS message
-                                    GstMessage *msg = gst_bus_timed_pop_filtered(
-                                        bus,
-                                        GST_SECOND, // 1 second timeout
-                                        static_cast<GstMessageType>(GST_MESSAGE_EOS | GST_MESSAGE_ERROR));
-                                    if (msg)
-                                    {
-                                        if (GST_MESSAGE_TYPE(msg) == GST_MESSAGE_ERROR)
-                                        {
-                                            GError *err = nullptr;
-                                            gst_message_parse_error(msg, &err, nullptr);
-                                            OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Error during shutdown: "
-                                                                  << (err ? err->message : "Unknown");
-                                            if (err)
-                                                g_error_free(err);
-                                        }
-                                        gst_message_unref(msg);
-                                    }
-                                    gst_object_unref(bus);
-                                }
-                            }
+                    switch (resolution)
+                    {
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_800x480:
+                        return 800;
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1280x720:
+                        return 1280;
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1920x1080:
+                        return 1920;
+                    default:
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
+                        return 800;
+                    }
+                }
 
-                            // Release all pipeline resources
-                            releasePipeline();
+                // ============================================================================
+                // getVideoHeight() - Get video height from configuration
+                // ============================================================================
 
-                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Stopped. Total frames processed: " << frameCount_;
-                        }
+                int KmssinkVideoOutput::getVideoHeight() const
+                {
+                    // Get resolution from configuration and return appropriate height
+                    // ----------------------------------------------------------------
+                    auto resolution = configuration_->getVideoResolution();
 
-                        // ============================================================================
-                        // releasePipeline() - Clean up GStreamer resources
-                        // ============================================================================
+                    switch (resolution)
+                    {
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_800x480:
+                        return 480;
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1280x720:
+                        return 720;
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1920x1080:
+                        return 1080;
+                    default:
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
+                        return 480;
+                    }
+                }
 
-                        void KmssinkVideoOutput::releasePipeline()
-                        {
-                            if (pipeline_)
-                            {
-                                OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Setting pipeline to NULL state";
-
-                                // Set pipeline to NULL state (releases all resources)
-                                gst_element_set_state(pipeline_, GST_STATE_NULL);
-
-                                // Wait for state change to complete
-                                GstState state, pending;
-                                gst_element_get_state(pipeline_, &state, &pending, GST_SECOND);
-
-                                // Unref the pipeline (this also unrefs all elements added to it)
-                                gst_object_unref(GST_OBJECT(pipeline_));
-                                pipeline_ = nullptr;
-
-                                OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Pipeline resources released";
-                            }
-
-                            // Clear element pointers (they were owned by the pipeline)
-                            appsrc_ = nullptr;
-                            h264parse_ = nullptr;
-                            decoder_ = nullptr;
-                            videoconvert_ = nullptr;
-                            kmssink_ = nullptr;
-                        }
-
-                        // ============================================================================
-                        // getVideoWidth() - Get video width from configuration
-                        // ============================================================================
-
-                        int KmssinkVideoOutput::getVideoWidth() const
-                        {
-                            // Get resolution from configuration and return appropriate width
-                            // ----------------------------------------------------------------
-                            auto resolution = configuration_->getVideoResolution();
-
-                            switch (resolution)
-                            {
-                            case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_800x480:
-                                return 800;
-                            case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1280x720:
-                                return 1280;
-                            case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1920x1080:
-                                return 1920;
-                            default:
-                                OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
-                                return 800;
-                            }
-                        }
-
-                        // ============================================================================
-                        // getVideoHeight() - Get video height from configuration
-                        // ============================================================================
-
-                        int KmssinkVideoOutput::getVideoHeight() const
-                        {
-                            // Get resolution from configuration and return appropriate height
-                            // ----------------------------------------------------------------
-                            auto resolution = configuration_->getVideoResolution();
-
-                            switch (resolution)
-                            {
-                            case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_800x480:
-                                return 480;
-                            case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1280x720:
-                                return 720;
-                            case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1920x1080:
-                                return 1080;
-                            default:
-                                OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
-                                return 480;
-                            }
-                        }
-
-                    } // namespace projection
-                } // namespace autoapp
-            } // namespace openauto
-        } // namespace f1x
+            } // namespace projection
+        } // namespace autoapp
+    } // namespace openauto
+} // namespace f1x
 
 #endif // USE_KMSSINK
