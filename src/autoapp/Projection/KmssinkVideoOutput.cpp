@@ -647,17 +647,15 @@ namespace f1x
 
                     switch (resolution)
                     {
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_480P:
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_800x480:
                         return 800;
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_720P:
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1280x720:
                         return 1280;
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1080P:
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1920x1080:
                         return 1920;
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_2160P:
-                        return 3840;
                     default:
-                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 720p";
-                        return 1280;
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
+                        return 800;
                     }
                 }
 
@@ -673,17 +671,15 @@ namespace f1x
 
                     switch (resolution)
                     {
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_480P:
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_800x480:
                         return 480;
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_720P:
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1280x720:
                         return 720;
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1080P:
+                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_1920x1080:
                         return 1080;
-                    case aap_protobuf::service::media::sink::message::VideoCodecResolutionType::VIDEO_2160P:
-                        return 2160;
                     default:
-                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 720p";
-                        return 720;
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
+                        return 480;
                     }
                 }
 
