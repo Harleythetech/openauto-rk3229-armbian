@@ -60,6 +60,14 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 
+// DRM/KMS includes for hardware cursor support
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
+
 // Standard library includes
 #include <cstring>
 #include <chrono>
@@ -77,6 +85,15 @@ namespace f1x
         {
             namespace projection
             {
+                // Static member definitions for DRM cursor
+                int KmssinkVideoOutput::drmFd_ = -1;
+                uint32_t KmssinkVideoOutput::cursorPlaneId_ = 0;
+                uint32_t KmssinkVideoOutput::cursorCrtcId_ = 0;
+                uint32_t KmssinkVideoOutput::cursorBufferHandle_ = 0;
+                uint32_t KmssinkVideoOutput::cursorFbId_ = 0;
+                bool KmssinkVideoOutput::cursorInitialized_ = false;
+                bool KmssinkVideoOutput::cursorVisible_ = false;
+                std::mutex KmssinkVideoOutput::cursorMutex_;
 
                 // ============================================================================
                 // Constructor
@@ -567,6 +584,9 @@ namespace f1x
                     isActive_.store(true);
                     frameCount_ = 0;
 
+                    // Initialize DRM hardware cursor
+                    initCursor();
+
                     OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Pipeline started successfully (state change: "
                                        << (ret == GST_STATE_CHANGE_SUCCESS ? "SUCCESS" : ret == GST_STATE_CHANGE_ASYNC ? "ASYNC"
                                                                                                                        : "NO_PREROLL")
@@ -790,6 +810,9 @@ namespace f1x
                     // Release all pipeline resources
                     releasePipeline();
 
+                    // Cleanup DRM cursor
+                    cleanupCursor();
+
                     OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Stopped. Total frames processed: " << frameCount_;
                 }
 
@@ -870,6 +893,243 @@ namespace f1x
                     default:
                         OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Unknown resolution, defaulting to 800x480";
                         return 480;
+                    }
+                }
+
+                // ============================================================================
+                // initCursor() - Initialize the DRM hardware cursor
+                // ============================================================================
+
+                bool KmssinkVideoOutput::initCursor()
+                {
+                    std::lock_guard<std::mutex> lock(cursorMutex_);
+
+                    if (cursorInitialized_)
+                    {
+                        return true;
+                    }
+
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Initializing DRM hardware cursor";
+
+                    // Open DRM device
+                    drmFd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+                    if (drmFd_ < 0)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to open /dev/dri/card0 for cursor";
+                        return false;
+                    }
+
+                    // Get DRM resources
+                    drmModeRes *resources = drmModeGetResources(drmFd_);
+                    if (!resources)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to get DRM resources for cursor";
+                        close(drmFd_);
+                        drmFd_ = -1;
+                        return false;
+                    }
+
+                    // Find the CRTC (display controller)
+                    if (resources->count_crtcs > 0)
+                    {
+                        cursorCrtcId_ = resources->crtcs[0]; // Use first CRTC
+                    }
+                    drmModeFreeResources(resources);
+
+                    if (cursorCrtcId_ == 0)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] No CRTC found for cursor";
+                        close(drmFd_);
+                        drmFd_ = -1;
+                        return false;
+                    }
+
+                    // Create cursor buffer (64x64 ARGB)
+                    // ----------------------------------------------------------------
+                    const int cursorWidth = 64;
+                    const int cursorHeight = 64;
+
+                    struct drm_mode_create_dumb createReq = {};
+                    createReq.width = cursorWidth;
+                    createReq.height = cursorHeight;
+                    createReq.bpp = 32;
+
+                    if (ioctl(drmFd_, DRM_IOCTL_MODE_CREATE_DUMB, &createReq) < 0)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to create cursor buffer";
+                        close(drmFd_);
+                        drmFd_ = -1;
+                        return false;
+                    }
+
+                    cursorBufferHandle_ = createReq.handle;
+
+                    // Map the buffer and draw a simple arrow cursor
+                    struct drm_mode_map_dumb mapReq = {};
+                    mapReq.handle = cursorBufferHandle_;
+
+                    if (ioctl(drmFd_, DRM_IOCTL_MODE_MAP_DUMB, &mapReq) < 0)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to map cursor buffer";
+                        close(drmFd_);
+                        drmFd_ = -1;
+                        return false;
+                    }
+
+                    uint32_t *cursorData = (uint32_t *)mmap(0, createReq.size, PROT_READ | PROT_WRITE, MAP_SHARED, drmFd_, mapReq.offset);
+                    if (cursorData == MAP_FAILED)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to mmap cursor buffer";
+                        close(drmFd_);
+                        drmFd_ = -1;
+                        return false;
+                    }
+
+                    // Draw a simple white arrow cursor with black outline
+                    // Clear to transparent
+                    memset(cursorData, 0, createReq.size);
+
+                    // Simple arrow cursor pattern (ARGB format)
+                    const uint32_t white = 0xFFFFFFFF;
+                    const uint32_t black = 0xFF000000;
+
+                    // Draw arrow shape
+                    for (int y = 0; y < 16; y++)
+                    {
+                        for (int x = 0; x <= y && x < 12; x++)
+                        {
+                            // Black outline
+                            if (x == 0 || x == y || y == 15)
+                            {
+                                cursorData[y * cursorWidth + x] = black;
+                            }
+                            else
+                            {
+                                cursorData[y * cursorWidth + x] = white;
+                            }
+                        }
+                    }
+
+                    munmap(cursorData, createReq.size);
+
+                    // Add framebuffer for cursor using the newer drmModeAddFB2 if available
+                    uint32_t handles[4] = {cursorBufferHandle_, 0, 0, 0};
+                    uint32_t strides[4] = {createReq.pitch, 0, 0, 0};
+                    uint32_t offsets[4] = {0, 0, 0, 0};
+
+                    // Try DRM_FORMAT_ARGB8888 (most common cursor format)
+                    if (drmModeAddFB2(drmFd_, cursorWidth, cursorHeight,
+                                      0x34325241, // DRM_FORMAT_ARGB8888
+                                      handles, strides, offsets, &cursorFbId_, 0) != 0)
+                    {
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to create cursor framebuffer";
+                        close(drmFd_);
+                        drmFd_ = -1;
+                        return false;
+                    }
+
+                    cursorInitialized_ = true;
+                    cursorVisible_ = false;
+
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] DRM cursor initialized, CRTC: " << cursorCrtcId_;
+                    return true;
+                }
+
+                // ============================================================================
+                // cleanupCursor() - Release cursor resources
+                // ============================================================================
+
+                void KmssinkVideoOutput::cleanupCursor()
+                {
+                    std::lock_guard<std::mutex> lock(cursorMutex_);
+
+                    if (!cursorInitialized_)
+                    {
+                        return;
+                    }
+
+                    if (drmFd_ >= 0)
+                    {
+                        // Hide cursor
+                        drmModeSetCursor(drmFd_, cursorCrtcId_, 0, 0, 0);
+
+                        // Remove framebuffer
+                        if (cursorFbId_ != 0)
+                        {
+                            drmModeRmFB(drmFd_, cursorFbId_);
+                            cursorFbId_ = 0;
+                        }
+
+                        // Destroy dumb buffer
+                        if (cursorBufferHandle_ != 0)
+                        {
+                            struct drm_mode_destroy_dumb destroyReq = {};
+                            destroyReq.handle = cursorBufferHandle_;
+                            ioctl(drmFd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroyReq);
+                            cursorBufferHandle_ = 0;
+                        }
+
+                        close(drmFd_);
+                        drmFd_ = -1;
+                    }
+
+                    cursorInitialized_ = false;
+                    cursorVisible_ = false;
+
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] DRM cursor cleaned up";
+                }
+
+                // ============================================================================
+                // updateCursorPosition() - Move the hardware cursor
+                // ============================================================================
+
+                void KmssinkVideoOutput::updateCursorPosition(int x, int y)
+                {
+                    std::lock_guard<std::mutex> lock(cursorMutex_);
+
+                    if (!cursorInitialized_ || drmFd_ < 0)
+                    {
+                        return;
+                    }
+
+                    // Show cursor if not visible
+                    if (!cursorVisible_)
+                    {
+                        if (drmModeSetCursor(drmFd_, cursorCrtcId_, cursorBufferHandle_, 64, 64) == 0)
+                        {
+                            cursorVisible_ = true;
+                            OPENAUTO_LOG(debug) << "[KmssinkVideoOutput] Cursor shown";
+                        }
+                    }
+
+                    // Move cursor
+                    drmModeMoveCursor(drmFd_, cursorCrtcId_, x, y);
+                }
+
+                // ============================================================================
+                // setCursorVisible() - Show or hide the cursor
+                // ============================================================================
+
+                void KmssinkVideoOutput::setCursorVisible(bool visible)
+                {
+                    std::lock_guard<std::mutex> lock(cursorMutex_);
+
+                    if (!cursorInitialized_ || drmFd_ < 0)
+                    {
+                        return;
+                    }
+
+                    if (visible && !cursorVisible_)
+                    {
+                        if (drmModeSetCursor(drmFd_, cursorCrtcId_, cursorBufferHandle_, 64, 64) == 0)
+                        {
+                            cursorVisible_ = true;
+                        }
+                    }
+                    else if (!visible && cursorVisible_)
+                    {
+                        drmModeSetCursor(drmFd_, cursorCrtcId_, 0, 0, 0);
+                        cursorVisible_ = false;
                     }
                 }
 

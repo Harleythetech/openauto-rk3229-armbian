@@ -69,6 +69,7 @@ namespace f1x
                  * - Direct rendering to DRM/KMS plane (no compositing overhead)
                  * - Configurable DRM connector and plane IDs
                  * - Thread-safe frame writing
+                 * - DRM hardware cursor support
                  *
                  * Usage:
                  * 1. Create instance with configuration
@@ -154,6 +155,22 @@ namespace f1x
                      */
                     bool renderFrame(const uint8_t *frameData, size_t frameSize, uint64_t timestamp);
 
+                    /**
+                     * @brief Updates the hardware cursor position.
+                     * @param x X coordinate in screen pixels.
+                     * @param y Y coordinate in screen pixels.
+                     *
+                     * This updates the DRM hardware cursor position on the cursor plane.
+                     * Static method so it can be called from InputDevice.
+                     */
+                    static void updateCursorPosition(int x, int y);
+
+                    /**
+                     * @brief Shows or hides the hardware cursor.
+                     * @param visible true to show cursor, false to hide.
+                     */
+                    static void setCursorVisible(bool visible);
+
                 private:
                     /**
                      * @brief Creates and links all GStreamer pipeline elements.
@@ -190,6 +207,17 @@ namespace f1x
                      */
                     int getVideoHeight() const;
 
+                    /**
+                     * @brief Initializes the DRM hardware cursor.
+                     * @return true if cursor initialized successfully.
+                     */
+                    bool initCursor();
+
+                    /**
+                     * @brief Cleans up cursor resources.
+                     */
+                    void cleanupCursor();
+
                     // Thread synchronization
                     std::mutex mutex_;
 
@@ -210,6 +238,16 @@ namespace f1x
                     // Optional: DRM connector and plane IDs (0 = auto-detect)
                     int connectorId_;
                     int planeId_;
+
+                    // DRM cursor state (static for access from InputDevice)
+                    static int drmFd_;
+                    static uint32_t cursorPlaneId_;
+                    static uint32_t cursorCrtcId_;
+                    static uint32_t cursorBufferHandle_;
+                    static uint32_t cursorFbId_;
+                    static bool cursorInitialized_;
+                    static bool cursorVisible_;
+                    static std::mutex cursorMutex_;
                 };
 
             } // namespace projection
