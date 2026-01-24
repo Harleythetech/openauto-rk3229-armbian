@@ -385,30 +385,27 @@ namespace f1x
                                  "async", TRUE,
                                  nullptr);
 
-                    // Set plane ID for Rockchip RK3229
+                    // Set connector and plane for Rockchip RK3229 with HDMI
                     // ----------------------------------------------------------------
-                    // On RK3229 with Armbian, the DRM planes are:
-                    //   Plane 31: Primary (zpos=0) - typically used by the desktop/GUI
-                    //   Plane 36: Overlay (zpos=1) - supports NV12, renders ON TOP of primary
-                    //   Plane 41: Cursor (zpos=2) - doesn't support NV12
+                    // Connector 46: HDMI-A-1 (the only connected display)
+                    // Plane 31: Primary (zpos=0) - supports NV12
+                    // Plane 36: Overlay (zpos=1) - supports NV12, renders on top
+                    // Plane 41: Cursor (zpos=2) - no NV12 support
                     //
-                    // We use the overlay plane (36) so video renders on top of any GUI.
-                    // This allows Android Auto to display without stopping Crankshaft.
-                    int effectivePlaneId = (planeId_ > 0) ? planeId_ : 36; // Default to overlay plane
+                    // NOTE: Stop the GUI before running autoapp, as both compete for the same plane
+                    int effectiveConnectorId = (connectorId_ > 0) ? connectorId_ : 46; // HDMI-A-1
+                    int effectivePlaneId = (planeId_ > 0) ? planeId_ : 31;             // Primary plane
 
-                    g_object_set(G_OBJECT(kmssink_), "plane-id", effectivePlaneId, nullptr);
-                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using plane-id: " << effectivePlaneId
-                                       << " (overlay plane for RK3229)";
-
-                    if (connectorId_ > 0)
-                    {
-                        g_object_set(G_OBJECT(kmssink_), "connector-id", connectorId_, nullptr);
-                        OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using connector-id: " << connectorId_;
-                    }
+                    g_object_set(G_OBJECT(kmssink_),
+                                 "connector-id", effectiveConnectorId,
+                                 "plane-id", effectivePlaneId,
+                                 nullptr);
+                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using connector-id: " << effectiveConnectorId
+                                       << ", plane-id: " << effectivePlaneId;
 
                     // Note: To find available connectors and planes, run:
-                    // modetest -M <drm-device> -c (for connectors)
-                    // modetest -M <drm-device> -p (for planes)
+                    // modetest -M rockchip -c (for connectors)
+                    // modetest -M rockchip -p (for planes)
 
                     OPENAUTO_LOG(info) << "[KmssinkVideoOutput] kmssink configured successfully";
                     return true;
