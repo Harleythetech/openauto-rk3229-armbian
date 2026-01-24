@@ -205,20 +205,18 @@ namespace f1x
                         return false;
                     }
 
-                    // decoder: V4L2 stateless H.264 decoder (hardware accelerated)
+                    // decoder: H.264 decoder
                     // ----------------------------------------------------------------
-                    // Try v4l2slh264dec first (stateless, preferred for RPi4, RK3229, i.MX8, etc.)
+                    // Try hardware decoder first - outputs DMA-BUF NV12 which kmssink can use directly.
+                    // Skip videoconvert for hardware decoders as it can't handle DMA-BUF memory.
+                    bool usingHwDecoder = false;
+
+                    // Try stateless V4L2 decoder first (best for RK3229/rkvdec)
                     decoder_ = gst_element_factory_make("v4l2slh264dec", "video-decoder");
                     if (decoder_)
                     {
                         OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using v4l2slh264dec (stateless HW decoder)";
-                        // For Rockchip RK3229, the rkvdec is typically at /dev/video2
-                        // Try to set the video-device property if it exists
-                        if (g_object_class_find_property(G_OBJECT_GET_CLASS(decoder_), "video-device"))
-                        {
-                            g_object_set(G_OBJECT(decoder_), "video-device", "/dev/video2", nullptr);
-                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Set decoder video-device to /dev/video2";
-                        }
+                        usingHwDecoder = true;
                     }
                     if (!decoder_)
                     {
@@ -228,16 +226,29 @@ namespace f1x
                         if (decoder_)
                         {
                             OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using v4l2h264dec (stateful HW decoder)";
+                            usingHwDecoder = true;
                         }
                     }
                     if (!decoder_)
                     {
-                        // Fallback to software decoder
-                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] V4L2 decoders not available, falling back to avdec_h264";
+                        // Fallback to software decoder - try openh264dec first (available on this system)
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] HW decoders not available, trying openh264dec";
+                        decoder_ = gst_element_factory_make("openh264dec", "video-decoder");
+                        if (decoder_)
+                        {
+                            OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using openh264dec (software decoder)";
+                            usingHwDecoder = false;
+                        }
+                    }
+                    if (!decoder_)
+                    {
+                        // Last fallback - avdec_h264 (requires gstreamer1.0-libav)
+                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] openh264dec not available, trying avdec_h264";
                         decoder_ = gst_element_factory_make("avdec_h264", "video-decoder");
                         if (decoder_)
                         {
                             OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using avdec_h264 (software decoder)";
+                            usingHwDecoder = false;
                         }
                     }
                     if (!decoder_)
@@ -246,14 +257,22 @@ namespace f1x
                         return false;
                     }
 
-                    // videoconvert: Format converter for compatibility between decoder and sink
+                    // videoconvert: Only used for software decoders
                     // ----------------------------------------------------------------
-                    // The V4L2 decoder may output formats that kmssink doesn't directly support
-                    videoconvert_ = gst_element_factory_make("videoconvert", "video-converter");
-                    if (!videoconvert_)
+                    // Hardware decoders output DMA-BUF NV12 which goes directly to kmssink.
+                    // Software decoders may need format conversion.
+                    videoconvert_ = nullptr;
+                    if (!usingHwDecoder)
                     {
-                        OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to create videoconvert, trying without";
-                        // Continue without videoconvert - might work if formats are compatible
+                        videoconvert_ = gst_element_factory_make("videoconvert", "video-converter");
+                        if (!videoconvert_)
+                        {
+                            OPENAUTO_LOG(warning) << "[KmssinkVideoOutput] Failed to create videoconvert";
+                        }
+                    }
+                    else
+                    {
+                        OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using HW decoder - skipping videoconvert (DMA-BUF path)";
                     }
 
                     // kmssink: KMS/DRM video sink
@@ -296,6 +315,39 @@ namespace f1x
                     }
 
                     OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Pipeline elements created and linked";
+
+                    // Add debug probes to track data flow through pipeline
+                    // ----------------------------------------------------------------
+                    GstPad *decoderSrcPad = gst_element_get_static_pad(decoder_, "src");
+                    if (decoderSrcPad)
+                    {
+                        gst_pad_add_probe(decoderSrcPad, GST_PAD_PROBE_TYPE_BUFFER, [](GstPad *pad, GstPadProbeInfo *info, gpointer user_data) -> GstPadProbeReturn
+                                          {
+                                static int decoderFrameCount = 0;
+                                if (++decoderFrameCount <= 5 || decoderFrameCount % 100 == 0) {
+                                    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+                                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Decoder output frame " 
+                                                       << decoderFrameCount << ", size: " << gst_buffer_get_size(buffer);
+                                }
+                                return GST_PAD_PROBE_OK; }, nullptr, nullptr);
+                        gst_object_unref(decoderSrcPad);
+                    }
+
+                    GstPad *kmssinkPad = gst_element_get_static_pad(kmssink_, "sink");
+                    if (kmssinkPad)
+                    {
+                        gst_pad_add_probe(kmssinkPad, GST_PAD_PROBE_TYPE_BUFFER, [](GstPad *pad, GstPadProbeInfo *info, gpointer user_data) -> GstPadProbeReturn
+                                          {
+                                static int sinkFrameCount = 0;
+                                if (++sinkFrameCount <= 5 || sinkFrameCount % 100 == 0) {
+                                    GstBuffer *buffer = GST_PAD_PROBE_INFO_BUFFER(info);
+                                    OPENAUTO_LOG(info) << "[KmssinkVideoOutput] kmssink received frame " 
+                                                       << sinkFrameCount << ", size: " << gst_buffer_get_size(buffer);
+                                }
+                                return GST_PAD_PROBE_OK; }, nullptr, nullptr);
+                        gst_object_unref(kmssinkPad);
+                    }
+
                     return true;
                 }
 
@@ -376,11 +428,12 @@ namespace f1x
 
                     // Configure kmssink properties
                     // ----------------------------------------------------------------
-                    // Note: 'force-aspect-ratio' is not available on all kmssink versions
-                    // Only set properties that are guaranteed to exist
+                    // IMPORTANT: sync=FALSE is required because Android Auto timestamps
+                    // are absolute (starting at ~150+ seconds), not relative to stream start.
+                    // With sync=TRUE, kmssink would wait forever before displaying the first frame.
                     g_object_set(G_OBJECT(kmssink_),
-                                 // Sync to clock for smooth playback
-                                 "sync", TRUE,
+                                 // Disable sync - Android Auto uses absolute timestamps
+                                 "sync", FALSE,
                                  // Enable async state changes
                                  "async", TRUE,
                                  nullptr);
