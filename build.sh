@@ -92,7 +92,8 @@ while [[ $# -gt 0 ]]; do
             echo "Video Backend: GStreamer kmssink (KMS/DRM direct plane rendering)"
             echo ""
             echo "Required dependencies (auto-installed with --auto-deps):"
-            echo "  Qt5:       qtbase5-dev, qtmultimedia5-dev, libqt5bluetooth5-dev"
+            echo "  Qt5:       qtbase5-dev, qtmultimedia5-dev, qtconnectivity5-dev"
+            echo "  Bluetooth: bluez, libbluetooth-dev"
             echo "  Audio:     librtaudio-dev"
             echo "  GStreamer: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,"
             echo "             gstreamer1.0-plugins-bad, gstreamer1.0-libav"
@@ -179,14 +180,18 @@ if command -v pkg-config &> /dev/null; then
         MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtmultimedia5-dev"
     fi
     if ! pkg-config --exists Qt5Bluetooth 2>/dev/null; then
-        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libqt5bluetooth5-dev"
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtconnectivity5-dev"
+    fi
+    # Check for bluez/bluetooth
+    if ! pkg-config --exists bluez 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} bluez libbluetooth-dev"
     fi
     if ! pkg-config --exists Qt5DBus 2>/dev/null; then
         MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libqt5dbus5"
     fi
 else
     # pkg-config not available, assume Qt5 packages needed
-    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins libqt5bluetooth5-dev"
+    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins qtconnectivity5-dev bluez libbluetooth-dev"
 fi
 
 # Check for rtaudio
@@ -300,7 +305,9 @@ if [ -n "$ALL_MISSING_DEPS" ]; then
             echo "Installing additional recommended packages..."
             # Qt5 packages
             $APT_CMD install -y qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins \
-                libqt5bluetooth5-dev libqt5dbus5 2>/dev/null || true
+                qtconnectivity5-dev 2>/dev/null || true
+            # Bluetooth packages
+            $APT_CMD install -y bluez libbluetooth-dev 2>/dev/null || true
             # GStreamer packages
             $APT_CMD install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
                 gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
@@ -328,7 +335,7 @@ if [ -n "$ALL_MISSING_DEPS" ]; then
         echo ""
         echo "Full dependency list:"
         echo "  sudo apt-get install qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins \\"
-        echo "      libqt5bluetooth5-dev librtaudio-dev libtag1-dev libblkid-dev libgps-dev \\"
+        echo "      qtconnectivity5-dev bluez libbluetooth-dev librtaudio-dev libtag1-dev libblkid-dev libgps-dev \\"
         echo "      libusb-1.0-0-dev libssl-dev libprotobuf-dev protobuf-compiler \\"
         echo "      libboost-all-dev cmake build-essential \\"
         echo "      gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
