@@ -91,11 +91,14 @@ while [[ $# -gt 0 ]]; do
             echo "Target Platform: RK3229 (Rockchip) on Armbian"
             echo "Video Backend: GStreamer kmssink (KMS/DRM direct plane rendering)"
             echo ""
-            echo "Required dependencies for KMS/DRM build:"
-            echo "  - gstreamer1.0-plugins-base, gstreamer1.0-plugins-good"
-            echo "  - gstreamer1.0-plugins-bad (for kmssink)"
-            echo "  - gstreamer1.0-libav or gstreamer1.0-openh264 (for H.264 decoding)"
-            echo "  - libdrm-dev (for DRM cursor support)"
+            echo "Required dependencies (auto-installed with --auto-deps):"
+            echo "  Qt5:       qtbase5-dev, qtmultimedia5-dev, libqt5bluetooth5-dev"
+            echo "  Audio:     librtaudio-dev"
+            echo "  GStreamer: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,"
+            echo "             gstreamer1.0-plugins-bad, gstreamer1.0-libav"
+            echo "  DRM:       libdrm-dev"
+            echo "  Other:     libtag1-dev, libblkid-dev, libgps-dev, libusb-1.0-0-dev,"
+            echo "             libssl-dev, libprotobuf-dev, libboost-all-dev"
             echo ""
             echo "Examples:"
             echo "  $0 release --package"
@@ -156,18 +159,69 @@ else
     echo "Warning: distro_release.sh not found, using default release suffix"
 fi
 
-# Check dependencies for KMS/DRM build
-if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
-    echo ""
-    echo "Checking KMS/DRM dependencies..."
-    MISSING_DEV_DEPS=""
-    MISSING_RUNTIME_DEPS=""
-    
-    # Check for pkg-config
-    if ! command -v pkg-config &> /dev/null; then
-        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} pkg-config"
+# Check build dependencies
+echo ""
+echo "Checking build dependencies..."
+MISSING_DEV_DEPS=""
+MISSING_RUNTIME_DEPS=""
+
+# Check for pkg-config
+if ! command -v pkg-config &> /dev/null; then
+    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} pkg-config"
+fi
+
+# Check for Qt5 development libraries
+if command -v pkg-config &> /dev/null; then
+    if ! pkg-config --exists Qt5Core 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins"
     fi
-    
+    if ! pkg-config --exists Qt5Multimedia 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtmultimedia5-dev"
+    fi
+    if ! pkg-config --exists Qt5Bluetooth 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libqt5bluetooth5-dev"
+    fi
+    if ! pkg-config --exists Qt5DBus 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libqt5dbus5"
+    fi
+else
+    # pkg-config not available, assume Qt5 packages needed
+    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins libqt5bluetooth5-dev"
+fi
+
+# Check for rtaudio
+if command -v pkg-config &> /dev/null; then
+    if ! pkg-config --exists rtaudio 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} librtaudio-dev"
+    fi
+else
+    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} librtaudio-dev"
+fi
+
+# Check for other common build dependencies
+if command -v pkg-config &> /dev/null; then
+    if ! pkg-config --exists taglib 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libtag1-dev"
+    fi
+    if ! pkg-config --exists blkid 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libblkid-dev"
+    fi
+    if ! pkg-config --exists libgps 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libgps-dev"
+    fi
+    if ! pkg-config --exists libusb-1.0 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libusb-1.0-0-dev"
+    fi
+    if ! pkg-config --exists openssl 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libssl-dev"
+    fi
+    if ! pkg-config --exists protobuf 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libprotobuf-dev protobuf-compiler"
+    fi
+fi
+
+# Check for GStreamer/DRM dependencies (only needed for KMS/DRM build)
+if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
     # Check for GStreamer development libraries
     if command -v pkg-config &> /dev/null; then
         if ! pkg-config --exists gstreamer-1.0 2>/dev/null; then
@@ -198,78 +252,70 @@ if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
         # gst-inspect not available, assume we need base plugins
         MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav"
     fi
+fi
+
+# Remove duplicates from deps
+MISSING_DEV_DEPS=$(echo "$MISSING_DEV_DEPS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+MISSING_RUNTIME_DEPS=$(echo "$MISSING_RUNTIME_DEPS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+
+ALL_MISSING_DEPS="${MISSING_DEV_DEPS}${MISSING_RUNTIME_DEPS}"
+
+if [ -n "$ALL_MISSING_DEPS" ]; then
+    echo "Missing dependencies detected:${ALL_MISSING_DEPS}"
+    echo ""
     
-    # Remove duplicates from runtime deps
-    MISSING_RUNTIME_DEPS=$(echo "$MISSING_RUNTIME_DEPS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+    # Determine how to run apt-get (as root or with sudo)
+    if [ "$(id -u)" -eq 0 ]; then
+        # Running as root, no sudo needed
+        APT_CMD="apt-get"
+        echo "Running as root - will install directly."
+    elif command -v sudo &> /dev/null; then
+        APT_CMD="sudo apt-get"
+        echo "Will use sudo to install packages."
+    else
+        APT_CMD=""
+    fi
     
-    ALL_MISSING_DEPS="${MISSING_DEV_DEPS}${MISSING_RUNTIME_DEPS}"
-    
-    if [ -n "$ALL_MISSING_DEPS" ]; then
-        echo "Missing dependencies detected:${ALL_MISSING_DEPS}"
-        echo ""
-        
-        # Determine how to run apt-get (as root or with sudo)
-        if [ "$(id -u)" -eq 0 ]; then
-            # Running as root, no sudo needed
-            APT_CMD="apt-get"
-            echo "Running as root - will install directly."
-        elif command -v sudo &> /dev/null; then
-            APT_CMD="sudo apt-get"
-            echo "Will use sudo to install packages."
+    if [ -n "$APT_CMD" ]; then
+        INSTALL_DEPS=false
+        if [ "$AUTO_DEPS" = true ]; then
+            echo "Auto-installing dependencies (--auto-deps enabled)..."
+            INSTALL_DEPS=true
         else
-            APT_CMD=""
+            echo "Would you like to install missing dependencies automatically?"
+            read -p "Install dependencies? [Y/n] " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                INSTALL_DEPS=true
+            fi
         fi
         
-        if [ -n "$APT_CMD" ]; then
-            INSTALL_DEPS=false
-            if [ "$AUTO_DEPS" = true ]; then
-                echo "Auto-installing dependencies (--auto-deps enabled)..."
-                INSTALL_DEPS=true
-            else
-                echo "Would you like to install missing dependencies automatically?"
-                read -p "Install dependencies? [Y/n] " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-                    INSTALL_DEPS=true
-                fi
-            fi
+        if [ "$INSTALL_DEPS" = true ]; then
+            echo "Installing dependencies with: $APT_CMD"
+            $APT_CMD update
+            $APT_CMD install -y ${ALL_MISSING_DEPS}
             
-            if [ "$INSTALL_DEPS" = true ]; then
-                echo "Installing dependencies with: $APT_CMD"
-                $APT_CMD update
-                $APT_CMD install -y ${ALL_MISSING_DEPS}
-                
-                # Also install additional recommended packages
-                echo ""
-                echo "Installing additional recommended GStreamer packages..."
-                $APT_CMD install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-                    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
-                    gstreamer1.0-tools libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-                    libdrm-dev 2>/dev/null || true
-                
-                echo ""
-                echo "Dependencies installed successfully."
-            else
-                echo "Skipping dependency installation."
-                echo "You may encounter build errors without these packages."
-                read -p "Continue anyway? [y/N] " -n 1 -r
-                echo
-                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                    exit 1
-                fi
-            fi
+            # Also install additional recommended packages
+            echo ""
+            echo "Installing additional recommended packages..."
+            # Qt5 packages
+            $APT_CMD install -y qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins \
+                libqt5bluetooth5-dev libqt5dbus5 2>/dev/null || true
+            # GStreamer packages
+            $APT_CMD install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+                gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+                gstreamer1.0-tools libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+                libdrm-dev 2>/dev/null || true
+            # Other build dependencies
+            $APT_CMD install -y librtaudio-dev libtag1-dev libblkid-dev libgps-dev \
+                libusb-1.0-0-dev libssl-dev libprotobuf-dev protobuf-compiler \
+                libboost-all-dev cmake build-essential 2>/dev/null || true
+            
+            echo ""
+            echo "Dependencies installed successfully."
         else
-            echo "sudo not available and not running as root. Please install manually:"
-            echo "  sudo apt-get install${ALL_MISSING_DEPS}"
-            echo ""
-            echo "Also install GStreamer plugins:"
-            echo "  sudo apt-get install gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
-            echo "                       gstreamer1.0-plugins-bad gstreamer1.0-libav"
-            echo ""
-            if [ "$AUTO_DEPS" = true ]; then
-                echo "Cannot auto-install without sudo or root. Exiting."
-                exit 1
-            fi
+            echo "Skipping dependency installation."
+            echo "You may encounter build errors without these packages."
             read -p "Continue anyway? [y/N] " -n 1 -r
             echo
             if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -277,8 +323,30 @@ if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
             fi
         fi
     else
-        echo "All KMS/DRM dependencies found."
+        echo "sudo not available and not running as root. Please install manually:"
+        echo "  sudo apt-get install${ALL_MISSING_DEPS}"
+        echo ""
+        echo "Full dependency list:"
+        echo "  sudo apt-get install qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins \\"
+        echo "      libqt5bluetooth5-dev librtaudio-dev libtag1-dev libblkid-dev libgps-dev \\"
+        echo "      libusb-1.0-0-dev libssl-dev libprotobuf-dev protobuf-compiler \\"
+        echo "      libboost-all-dev cmake build-essential \\"
+        echo "      gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
+        echo "      gstreamer1.0-plugins-bad gstreamer1.0-libav \\"
+        echo "      libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libdrm-dev"
+        echo ""
+        if [ "$AUTO_DEPS" = true ]; then
+            echo "Cannot auto-install without sudo or root. Exiting."
+            exit 1
+        fi
+        read -p "Continue anyway? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
+else
+    echo "All build dependencies found."
 fi
 
 # Configure CMake
