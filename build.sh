@@ -208,8 +208,19 @@ if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
         echo "Missing dependencies detected:${ALL_MISSING_DEPS}"
         echo ""
         
-        # Check if we can use sudo
-        if command -v sudo &> /dev/null; then
+        # Determine how to run apt-get (as root or with sudo)
+        if [ "$(id -u)" -eq 0 ]; then
+            # Running as root, no sudo needed
+            APT_CMD="apt-get"
+            echo "Running as root - will install directly."
+        elif command -v sudo &> /dev/null; then
+            APT_CMD="sudo apt-get"
+            echo "Will use sudo to install packages."
+        else
+            APT_CMD=""
+        fi
+        
+        if [ -n "$APT_CMD" ]; then
             INSTALL_DEPS=false
             if [ "$AUTO_DEPS" = true ]; then
                 echo "Auto-installing dependencies (--auto-deps enabled)..."
@@ -224,14 +235,14 @@ if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
             fi
             
             if [ "$INSTALL_DEPS" = true ]; then
-                echo "Installing dependencies..."
-                sudo apt-get update
-                sudo apt-get install -y ${ALL_MISSING_DEPS}
+                echo "Installing dependencies with: $APT_CMD"
+                $APT_CMD update
+                $APT_CMD install -y ${ALL_MISSING_DEPS}
                 
                 # Also install additional recommended packages
                 echo ""
                 echo "Installing additional recommended GStreamer packages..."
-                sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+                $APT_CMD install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
                     gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
                     gstreamer1.0-tools libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
                     libdrm-dev 2>/dev/null || true
@@ -248,15 +259,15 @@ if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
                 fi
             fi
         else
-            echo "sudo not available. Please install manually:"
-            echo "  apt-get install${ALL_MISSING_DEPS}"
+            echo "sudo not available and not running as root. Please install manually:"
+            echo "  sudo apt-get install${ALL_MISSING_DEPS}"
             echo ""
             echo "Also install GStreamer plugins:"
-            echo "  apt-get install gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
-            echo "                  gstreamer1.0-plugins-bad gstreamer1.0-libav"
+            echo "  sudo apt-get install gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
+            echo "                       gstreamer1.0-plugins-bad gstreamer1.0-libav"
             echo ""
             if [ "$AUTO_DEPS" = true ]; then
-                echo "Cannot auto-install without sudo. Exiting."
+                echo "Cannot auto-install without sudo or root. Exiting."
                 exit 1
             fi
             read -p "Continue anyway? [y/N] " -n 1 -r
