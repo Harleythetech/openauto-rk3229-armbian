@@ -1,5 +1,5 @@
 #!/bin/bash
-# * Project: OpenAuto
+# * Project: OpenAuto (RK3229/Armbian Custom Build)
 # * This file is part of openauto project.
 # * Copyright (C) 2025 OpenCarDev Team
 # *
@@ -18,11 +18,14 @@
 
 set -e
 
-# Script to build OpenAuto consistently across Docker and local environments
-# Usage: ./build.sh [release|debug] [--clean] [--package] [--output-dir DIR]
+# Script to build OpenAuto for RK3229/Armbian with KMS/DRM video output
+# This custom build uses GStreamer kmssink for direct DRM plane rendering
+# Usage: ./build.sh [release|debug] [--clean] [--package] [--output-dir DIR] [--no-kmssink]
 
 # Default values
 NOPI_FLAG="-DNOPI=ON"
+USE_KMSSINK_FLAG="-DUSE_KMSSINK=ON"  # Enable KMS/DRM video output by default
+AUTO_DEPS=false  # Auto-install dependencies without prompting
 CLEAN_BUILD=false
 PACKAGE=false
 OUTPUT_DIR="/output"
@@ -60,23 +63,46 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
+        --no-kmssink)
+            USE_KMSSINK_FLAG="-DUSE_KMSSINK=OFF"
+            shift
+            ;;
+        --auto-deps)
+            AUTO_DEPS=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [release|debug] [OPTIONS]"
             echo ""
+            echo "OpenAuto build script for RK3229/Armbian with KMS/DRM video output"
+            echo ""
             echo "Build types:"
-            echo "  release        Build release version (default)"
-            echo "  debug          Build debug version with symbols"
+            echo "  release        Build release version (default on main/master branch)"
+            echo "  debug          Build debug version with symbols (default on other branches)"
             echo ""
             echo "Options:"
             echo "  --clean        Clean build directory before building"
             echo "  --package      Create DEB packages after building"
             echo "  --output-dir   Directory to copy packages (default: /output)"
+            echo "  --no-kmssink   Disable KMS/DRM video output (use Qt video output instead)"
+            echo "  --auto-deps    Automatically install missing dependencies without prompting"
             echo "  --help         Show this help message"
+            echo ""
+            echo "Target Platform: RK3229 (Rockchip) on Armbian"
+            echo "Video Backend: GStreamer kmssink (KMS/DRM direct plane rendering)"
+            echo ""
+            echo "Required dependencies for KMS/DRM build:"
+            echo "  - gstreamer1.0-plugins-base, gstreamer1.0-plugins-good"
+            echo "  - gstreamer1.0-plugins-bad (for kmssink)"
+            echo "  - gstreamer1.0-libav or gstreamer1.0-openh264 (for H.264 decoding)"
+            echo "  - libdrm-dev (for DRM cursor support)"
             echo ""
             echo "Examples:"
             echo "  $0 release --package"
             echo "  $0 debug --clean"
             echo "  $0 release --package --output-dir ./packages"
+            echo "  $0 release --no-kmssink    # Build without KMS/DRM (fallback to Qt)"
+            echo "  $0 release --auto-deps     # Auto-install dependencies and build"
             exit 0
             ;;
         *)
@@ -92,18 +118,19 @@ if [ "$BUILD_TYPE" = "debug" ]; then
     BUILD_DIR="${SOURCE_DIR}/build-debug"
     CMAKE_BUILD_TYPE="Debug"
     CMAKE_CXX_FLAGS="-g3 -O0"
-    echo "=== Building OpenAuto (Debug) ==="
+    echo "=== Building OpenAuto for RK3229/Armbian (Debug) ==="
 else
     BUILD_DIR="${SOURCE_DIR}/build-release"
     CMAKE_BUILD_TYPE="Release"
     CMAKE_CXX_FLAGS=""
-    echo "=== Building OpenAuto (Release) ==="
+    echo "=== Building OpenAuto for RK3229/Armbian (Release) ==="
 fi
 
 echo "Source directory: ${SOURCE_DIR}"
 echo "Build directory: ${BUILD_DIR}"
 echo "Build type: ${CMAKE_BUILD_TYPE}"
 echo "NOPI: ON (no Pi hardware dependencies)"
+echo "USE_KMSSINK: $([ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ] && echo "ON (KMS/DRM video output)" || echo "OFF (Qt video output)")"
 echo "Package: ${PACKAGE}"
 
 # Clean build directory if requested
@@ -129,6 +156,120 @@ else
     echo "Warning: distro_release.sh not found, using default release suffix"
 fi
 
+# Check dependencies for KMS/DRM build
+if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
+    echo ""
+    echo "Checking KMS/DRM dependencies..."
+    MISSING_DEV_DEPS=""
+    MISSING_RUNTIME_DEPS=""
+    
+    # Check for pkg-config
+    if ! command -v pkg-config &> /dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} pkg-config"
+    fi
+    
+    # Check for GStreamer development libraries
+    if command -v pkg-config &> /dev/null; then
+        if ! pkg-config --exists gstreamer-1.0 2>/dev/null; then
+            MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libgstreamer1.0-dev"
+        fi
+        if ! pkg-config --exists gstreamer-app-1.0 2>/dev/null; then
+            MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libgstreamer-plugins-base1.0-dev"
+        fi
+        # Check for libdrm
+        if ! pkg-config --exists libdrm 2>/dev/null; then
+            MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libdrm-dev"
+        fi
+    fi
+    
+    # Check for GStreamer runtime plugins (needed for kmssink and H.264 decoding)
+    if command -v gst-inspect-1.0 &> /dev/null; then
+        if ! gst-inspect-1.0 kmssink &>/dev/null; then
+            MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-bad"
+        fi
+        if ! gst-inspect-1.0 h264parse &>/dev/null; then
+            MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-bad"
+        fi
+        # Check for at least one H.264 decoder
+        if ! gst-inspect-1.0 avdec_h264 &>/dev/null && ! gst-inspect-1.0 openh264dec &>/dev/null; then
+            MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-libav"
+        fi
+    else
+        # gst-inspect not available, assume we need base plugins
+        MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav"
+    fi
+    
+    # Remove duplicates from runtime deps
+    MISSING_RUNTIME_DEPS=$(echo "$MISSING_RUNTIME_DEPS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+    
+    ALL_MISSING_DEPS="${MISSING_DEV_DEPS}${MISSING_RUNTIME_DEPS}"
+    
+    if [ -n "$ALL_MISSING_DEPS" ]; then
+        echo "Missing dependencies detected:${ALL_MISSING_DEPS}"
+        echo ""
+        
+        # Check if we can use sudo
+        if command -v sudo &> /dev/null; then
+            INSTALL_DEPS=false
+            if [ "$AUTO_DEPS" = true ]; then
+                echo "Auto-installing dependencies (--auto-deps enabled)..."
+                INSTALL_DEPS=true
+            else
+                echo "Would you like to install missing dependencies automatically?"
+                read -p "Install dependencies? [Y/n] " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                    INSTALL_DEPS=true
+                fi
+            fi
+            
+            if [ "$INSTALL_DEPS" = true ]; then
+                echo "Installing dependencies..."
+                sudo apt-get update
+                sudo apt-get install -y ${ALL_MISSING_DEPS}
+                
+                # Also install additional recommended packages
+                echo ""
+                echo "Installing additional recommended GStreamer packages..."
+                sudo apt-get install -y gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+                    gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+                    gstreamer1.0-tools libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+                    libdrm-dev 2>/dev/null || true
+                
+                echo ""
+                echo "Dependencies installed successfully."
+            else
+                echo "Skipping dependency installation."
+                echo "You may encounter build errors without these packages."
+                read -p "Continue anyway? [y/N] " -n 1 -r
+                echo
+                if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                    exit 1
+                fi
+            fi
+        else
+            echo "sudo not available. Please install manually:"
+            echo "  apt-get install${ALL_MISSING_DEPS}"
+            echo ""
+            echo "Also install GStreamer plugins:"
+            echo "  apt-get install gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
+            echo "                  gstreamer1.0-plugins-bad gstreamer1.0-libav"
+            echo ""
+            if [ "$AUTO_DEPS" = true ]; then
+                echo "Cannot auto-install without sudo. Exiting."
+                exit 1
+            fi
+            read -p "Continue anyway? [y/N] " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+        fi
+    else
+        echo "All KMS/DRM dependencies found."
+    fi
+fi
+
 # Configure CMake
 echo ""
 echo "Configuring with CMake..."
@@ -144,6 +285,10 @@ fi
 
 if [ -n "$NOPI_FLAG" ]; then
     CMAKE_ARGS+=("${NOPI_FLAG}")
+fi
+
+if [ -n "$USE_KMSSINK_FLAG" ]; then
+    CMAKE_ARGS+=("${USE_KMSSINK_FLAG}")
 fi
 
 if [ -n "$DISTRO_DEB_RELEASE" ]; then
@@ -190,12 +335,24 @@ fi
 
 echo ""
 echo "=== Build Summary ==="
+echo "Target platform: RK3229/Armbian"
 echo "Build type: ${CMAKE_BUILD_TYPE}"
 echo "Build directory: ${BUILD_DIR}"
-if [ -f "${BUILD_DIR}/autoapp" ]; then
+if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
+    echo "Video output: KMS/DRM (GStreamer kmssink)"
+    echo "  - Uses hardware H.264 decoding (v4l2slh264dec/v4l2h264dec)"
+    echo "  - Direct DRM plane rendering (no compositor needed)"
+else
+    echo "Video output: Qt Multimedia"
+fi
+if [ -f "${BUILD_DIR}/bin/autoapp" ]; then
+    echo "Binary: ${BUILD_DIR}/bin/autoapp"
+elif [ -f "${BUILD_DIR}/autoapp" ]; then
     echo "Binary: ${BUILD_DIR}/autoapp"
 fi
-if [ -f "${BUILD_DIR}/btservice" ]; then
+if [ -f "${BUILD_DIR}/bin/btservice" ]; then
+    echo "Binary: ${BUILD_DIR}/bin/btservice"
+elif [ -f "${BUILD_DIR}/btservice" ]; then
     echo "Binary: ${BUILD_DIR}/btservice"
 fi
 
