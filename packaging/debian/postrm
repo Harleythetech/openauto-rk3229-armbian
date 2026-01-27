@@ -19,16 +19,36 @@
 set -e
 
 case "$1" in
-    purge)
-        # Disable and remove service files on purge
+    purge|remove)
+        # Disable services
         if [ -x /bin/systemctl ]; then
-            /bin/systemctl disable openauto.service || true
-            /bin/systemctl disable openauto-btservice.service || true
+            /bin/systemctl stop openauto.service 2>/dev/null || true
+            /bin/systemctl stop openauto-btservice.service 2>/dev/null || true
+            /bin/systemctl disable openauto.service 2>/dev/null || true
+            /bin/systemctl disable openauto-btservice.service 2>/dev/null || true
+        fi
+
+        # Unmask getty@tty2 to restore normal tty behavior
+        if [ -x /bin/systemctl ]; then
+            echo "Restoring getty@tty2 service..."
+            /bin/systemctl unmask getty@tty2.service 2>/dev/null || true
+        fi
+
+        # Remove ldconfig entry
+        if [ -f /etc/ld.so.conf.d/openauto.conf ]; then
+            rm -f /etc/ld.so.conf.d/openauto.conf
+            ldconfig || true
+        fi
+
+        # Reload systemd
+        if [ -x /bin/systemctl ]; then
             /bin/systemctl daemon-reload || true
         fi
+
+        echo "OpenAuto removed. getty@tty2 has been restored."
         ;;
 
-    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
         ;;
 
     *)

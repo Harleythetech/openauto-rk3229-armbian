@@ -356,6 +356,38 @@ else
     echo "All build dependencies found."
 fi
 
+# Copy launcher script and dependencies if they exist (Docker build environment)
+# The script at /root/openauto.sh configures linuxfb, kmssink, and RTAudio
+if [ -f "/root/openauto.sh" ]; then
+    echo ""
+    echo "Copying launcher script from /root/openauto.sh..."
+    mkdir -p "${SOURCE_DIR}/packaging/opt/openauto"
+    cp -v "/root/openauto.sh" "${SOURCE_DIR}/packaging/opt/openauto/openauto.sh"
+    chmod +x "${SOURCE_DIR}/packaging/opt/openauto/openauto.sh"
+fi
+
+# Copy custom libraries from /root/deps/ if present
+# These include aasdk, aap_protobuf, and other dependencies
+if [ -d "/root/deps" ]; then
+    echo ""
+    echo "Copying custom libraries from /root/deps/..."
+    mkdir -p "${SOURCE_DIR}/deps/lib"
+    if [ -d "/root/deps/lib" ]; then
+        cp -rv /root/deps/lib/* "${SOURCE_DIR}/deps/lib/" 2>/dev/null || true
+    fi
+    # Also copy any .so files directly in /root/deps/
+    find /root/deps -maxdepth 1 -name "*.so*" -exec cp -v {} "${SOURCE_DIR}/deps/lib/" \; 2>/dev/null || true
+fi
+
+# Copy libaasdk and libaap_protobuf from /usr/local/lib if present
+if [ -d "/usr/local/lib" ]; then
+    echo ""
+    echo "Copying aasdk and aap_protobuf libraries..."
+    mkdir -p "${SOURCE_DIR}/deps/lib"
+    cp -v /usr/local/lib/libaasdk*.so* "${SOURCE_DIR}/deps/lib/" 2>/dev/null || true
+    cp -v /usr/local/lib/libaap_protobuf*.so* "${SOURCE_DIR}/deps/lib/" 2>/dev/null || true
+fi
+
 # Configure CMake
 echo ""
 echo "Configuring with CMake..."

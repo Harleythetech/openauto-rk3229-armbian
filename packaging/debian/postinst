@@ -31,13 +31,43 @@ case "$1" in
             /bin/systemctl daemon-reload || true
         fi
 
+        # Stop and mask getty@tty2 to prevent interference with linuxfb GUI
+        if [ -x /bin/systemctl ]; then
+            echo "Configuring tty2 for OpenAuto linuxfb output..."
+            /bin/systemctl stop getty@tty2.service 2>/dev/null || true
+            /bin/systemctl mask getty@tty2.service 2>/dev/null || true
+        fi
+
+        # Create ld.so.conf.d entry for custom libraries
+        if [ -d /opt/openauto/lib ]; then
+            echo "/opt/openauto/lib" > /etc/ld.so.conf.d/openauto.conf
+            ldconfig || true
+        fi
+
+        # Disable console blanking for framebuffer
+        if [ -f /sys/class/graphics/fbcon/cursor_blink ]; then
+            echo 0 > /sys/class/graphics/fbcon/cursor_blink || true
+        fi
+
         # Enable but don't start services (user can start manually or on next boot)
         if [ -x /bin/systemctl ]; then
             /bin/systemctl enable openauto.service || true
             /bin/systemctl enable openauto-btservice.service || true
         fi
 
-        echo "OpenAuto services enabled. Use 'systemctl start openauto' to start now."
+        echo ""
+        echo "OpenAuto (RK3229/Armbian) installed successfully!"
+        echo ""
+        echo "Configuration:"
+        echo "  - GUI: Qt linuxfb on /dev/tty2"
+        echo "  - Video: GStreamer kmssink (KMS/DRM)"
+        echo "  - Audio: RTAudio ALSA (direct, no PulseAudio)"
+        echo "  - Libraries: /opt/openauto/lib"
+        echo ""
+        echo "To start OpenAuto:"
+        echo "  sudo systemctl start openauto"
+        echo ""
+        echo "Note: getty@tty2 has been masked to prevent interference with the GUI."
         ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

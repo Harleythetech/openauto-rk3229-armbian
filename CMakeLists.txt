@@ -239,6 +239,47 @@ install(FILES
     DESTINATION /lib/systemd/system
 )
 
+# Install systemd override to disable getty on tty2 (prevents interference with linuxfb)
+install(CODE "
+    execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory \"\$ENV{DESTDIR}/etc/systemd/system/getty@tty2.service.d\")
+    file(WRITE \"\$ENV{DESTDIR}/etc/systemd/system/getty@tty2.service.d/override.conf\" \"[Service]\\nExecStart=\\nExecStart=-/sbin/agetty --autologin root --noclear %I \\$TERM\\n\")
+")
+
+# Create /opt/openauto directory structure
+install(DIRECTORY DESTINATION /opt/openauto)
+install(DIRECTORY DESTINATION /opt/openauto/lib)
+
+# Install launcher script (openauto.sh) to /opt/openauto
+# The script is expected to be at packaging/opt/openauto/openauto.sh
+# or will be copied during the build process from /root/openauto.sh
+if(EXISTS "${CMAKE_SOURCE_DIR}/packaging/opt/openauto/openauto.sh")
+    install(FILES packaging/opt/openauto/openauto.sh
+        DESTINATION /opt/openauto
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+    )
+endif()
+
+# Install custom libraries from deps/ directory if present
+# These include aasdk, aap_protobuf, and other dependencies
+if(EXISTS "${CMAKE_SOURCE_DIR}/deps/lib")
+    install(DIRECTORY "${CMAKE_SOURCE_DIR}/deps/lib/"
+        DESTINATION /opt/openauto/lib
+        FILES_MATCHING 
+        PATTERN "*.so*"
+        PATTERN "*.a" EXCLUDE
+    )
+endif()
+
+# Also install system-local libraries that may be needed
+install(CODE "
+    # Copy libaasdk and libaap_protobuf if they exist in /usr/local/lib
+    file(GLOB AASDK_LIBS \"/usr/local/lib/libaasdk*\")
+    file(GLOB AAP_LIBS \"/usr/local/lib/libaap_protobuf*\")
+    foreach(lib \${AASDK_LIBS} \${AAP_LIBS})
+        file(INSTALL \${lib} DESTINATION \"\$ENV{DESTDIR}/opt/openauto/lib\")
+    endforeach()
+")
+
 # Install crankshaft scripts to /opt/crankshaft
 install(FILES
     packaging/opt/crankshaft/crankshaft_default_env.sh
