@@ -222,6 +222,12 @@ namespace f1x
                         return false;
                     }
 
+                    // LOW LATENCY: Configure h264parse to not buffer frames
+                    g_object_set(G_OBJECT(h264parse_),
+                                 // Disable config-interval injection (reduces latency)
+                                 "config-interval", 0,
+                                 nullptr);
+
                     // decoder: H.264 decoder
                     // ----------------------------------------------------------------
                     // Try hardware decoder first - outputs DMA-BUF NV12 which kmssink can use directly.
@@ -234,6 +240,13 @@ namespace f1x
                     {
                         OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using v4l2slh264dec (stateless HW decoder)";
                         usingHwDecoder = true;
+
+                        // LOW LATENCY: Minimize V4L2 decoder buffering
+                        // - capture-io-mode=4 (DMABUF) for zero-copy to kmssink
+                        // - Minimize capture/output buffer count to reduce queuing
+                        g_object_set(G_OBJECT(decoder_),
+                                     "capture-io-mode", 4, // DMABUF for zero-copy
+                                     nullptr);
                     }
                     if (!decoder_)
                     {
@@ -244,6 +257,11 @@ namespace f1x
                         {
                             OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using v4l2h264dec (stateful HW decoder)";
                             usingHwDecoder = true;
+
+                            // LOW LATENCY: Minimize V4L2 decoder buffering
+                            g_object_set(G_OBJECT(decoder_),
+                                         "capture-io-mode", 4, // DMABUF for zero-copy
+                                         nullptr);
                         }
                     }
                     if (!decoder_)
@@ -302,27 +320,69 @@ namespace f1x
                         return false;
                     }
 
+                    // LOW LATENCY: Create a leaky queue between decoder and sink
+                    // This drops OLD frames when backed up, ensuring we always show the latest
+                    GstElement *queue = gst_element_factory_make("queue", "latency-queue");
+                    if (queue)
+                    {
+                        g_object_set(G_OBJECT(queue),
+                                     "max-size-buffers", (guint)1, // Only 1 frame in queue
+                                     "max-size-bytes", (guint)0,   // No byte limit
+                                     "max-size-time", (guint64)0,  // No time limit
+                                     "leaky", 2,                   // 2 = downstream (drop old frames)
+                                     nullptr);
+                        OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Using leaky queue (max 1 frame, drop old)";
+                    }
+
                     // Add all elements to the pipeline
                     // ----------------------------------------------------------------
                     if (videoconvert_)
                     {
-                        gst_bin_add_many(GST_BIN(pipeline_), appsrc_, h264parse_, decoder_, videoconvert_, kmssink_, nullptr);
+                        if (queue)
+                        {
+                            gst_bin_add_many(GST_BIN(pipeline_), appsrc_, h264parse_, decoder_, videoconvert_, queue, kmssink_, nullptr);
+                        }
+                        else
+                        {
+                            gst_bin_add_many(GST_BIN(pipeline_), appsrc_, h264parse_, decoder_, videoconvert_, kmssink_, nullptr);
+                        }
                     }
                     else
                     {
-                        gst_bin_add_many(GST_BIN(pipeline_), appsrc_, h264parse_, decoder_, kmssink_, nullptr);
+                        if (queue)
+                        {
+                            gst_bin_add_many(GST_BIN(pipeline_), appsrc_, h264parse_, decoder_, queue, kmssink_, nullptr);
+                        }
+                        else
+                        {
+                            gst_bin_add_many(GST_BIN(pipeline_), appsrc_, h264parse_, decoder_, kmssink_, nullptr);
+                        }
                     }
 
-                    // Link elements together: appsrc -> h264parse -> decoder -> [videoconvert] -> kmssink
+                    // Link elements together: appsrc -> h264parse -> decoder -> [videoconvert] -> [queue] -> kmssink
                     // ----------------------------------------------------------------
                     bool linked = false;
                     if (videoconvert_)
                     {
-                        linked = gst_element_link_many(appsrc_, h264parse_, decoder_, videoconvert_, kmssink_, nullptr);
+                        if (queue)
+                        {
+                            linked = gst_element_link_many(appsrc_, h264parse_, decoder_, videoconvert_, queue, kmssink_, nullptr);
+                        }
+                        else
+                        {
+                            linked = gst_element_link_many(appsrc_, h264parse_, decoder_, videoconvert_, kmssink_, nullptr);
+                        }
                     }
                     else
                     {
-                        linked = gst_element_link_many(appsrc_, h264parse_, decoder_, kmssink_, nullptr);
+                        if (queue)
+                        {
+                            linked = gst_element_link_many(appsrc_, h264parse_, decoder_, queue, kmssink_, nullptr);
+                        }
+                        else
+                        {
+                            linked = gst_element_link_many(appsrc_, h264parse_, decoder_, kmssink_, nullptr);
+                        }
                     }
 
                     if (!linked)
@@ -404,7 +464,7 @@ namespace f1x
                         return false;
                     }
 
-                    // Configure appsrc properties
+                    // Configure appsrc properties for LOW LATENCY
                     // ----------------------------------------------------------------
                     g_object_set(G_OBJECT(appsrc_),
                                  // Set the caps to describe the data format
@@ -417,10 +477,12 @@ namespace f1x
                                  "is-live", TRUE,
                                  // Don't block when pushing data (async mode)
                                  "block", FALSE,
-                                 // Max bytes to queue (tune based on memory constraints)
-                                 "max-bytes", (guint64)(4 * 1024 * 1024), // 4MB buffer
-                                 // Min latency in nanoseconds (for live sources)
+                                 // LOW LATENCY: Minimal buffer - just 2 frames worth (~100KB)
+                                 // Reduces buffering delay significantly
+                                 "max-bytes", (guint64)(100 * 1024), // 100KB - ~2 frames
+                                 // Min/max latency hints for live pipeline
                                  "min-latency", (gint64)0,
+                                 "max-latency", (gint64)(33 * GST_MSECOND), // 33ms = 1 frame at 30fps
                                  nullptr);
 
                     // Clean up caps reference (appsrc takes ownership)
@@ -443,16 +505,24 @@ namespace f1x
 
                     OPENAUTO_LOG(info) << "[KmssinkVideoOutput] Configuring kmssink";
 
-                    // Configure kmssink properties
+                    // Configure kmssink properties for LOW LATENCY
                     // ----------------------------------------------------------------
                     // IMPORTANT: sync=FALSE is required because Android Auto timestamps
                     // are absolute (starting at ~150+ seconds), not relative to stream start.
                     // With sync=TRUE, kmssink would wait forever before displaying the first frame.
                     g_object_set(G_OBJECT(kmssink_),
-                                 // Disable sync - Android Auto uses absolute timestamps
+                                 // Disable sync - display frames immediately
                                  "sync", FALSE,
-                                 // Enable async state changes
-                                 "async", TRUE,
+                                 // Disable async for faster state changes
+                                 "async", FALSE,
+                                 // Disable QoS (quality of service) - don't drop frames based on timing
+                                 "qos", FALSE,
+                                 // Disable throttling
+                                 "throttle-time", (guint64)0,
+                                 // Render last frame immediately on preroll
+                                 "enable-last-sample", FALSE,
+                                 // Maximum lateness - accept all frames regardless of timing
+                                 "max-lateness", (gint64)(-1),
                                  nullptr);
 
                     // Set connector and plane for Rockchip RK3229 with HDMI
@@ -547,6 +617,10 @@ namespace f1x
                             return TRUE; }, pipeline_);
                         gst_object_unref(bus);
                     }
+
+                    // LOW LATENCY: Set pipeline latency to minimum
+                    // This tells the pipeline to minimize buffering for live sources
+                    gst_pipeline_set_latency(GST_PIPELINE(pipeline_), 0);
 
                     // Transition pipeline to PLAYING state
                     // ----------------------------------------------------------------
@@ -647,18 +721,20 @@ namespace f1x
                         return;
                     }
 
-                    // Set buffer timestamps
+                    // Set buffer timestamps for LOW LATENCY
                     // ----------------------------------------------------------------
-                    // PTS (Presentation Time Stamp): When this frame should be displayed
-                    // Android Auto provides timestamps in nanoseconds
-                    GST_BUFFER_PTS(gstBuffer) = timestamp;
+                    // For minimum latency, we use frame count * duration rather than
+                    // Android Auto's absolute timestamps which can confuse the pipeline.
+                    // With sync=FALSE, these are just for ordering, not timing.
+                    uint64_t pts = frameCount_ * 33333333ULL; // ~30fps (33.3ms per frame in ns)
+                    GST_BUFFER_PTS(gstBuffer) = pts;
+                    GST_BUFFER_DTS(gstBuffer) = pts;
 
-                    // DTS (Decode Time Stamp): For H.264 with B-frames, DTS != PTS
-                    // For Android Auto streams (typically no B-frames), DTS = PTS
-                    GST_BUFFER_DTS(gstBuffer) = timestamp;
+                    // Duration: Set frame duration for better scheduling
+                    GST_BUFFER_DURATION(gstBuffer) = 33333333; // 33.3ms
 
-                    // Duration: We don't have exact duration, let downstream elements calculate
-                    GST_BUFFER_DURATION(gstBuffer) = GST_CLOCK_TIME_NONE;
+                    // Mark buffer as live for priority processing
+                    GST_BUFFER_FLAG_SET(gstBuffer, GST_BUFFER_FLAG_LIVE);
 
                     // Push the buffer into appsrc
                     // ----------------------------------------------------------------
