@@ -190,7 +190,7 @@ namespace f1x
                 // ============================================================================
 
                 FFmpegDrmVideoOutput::FFmpegDrmVideoOutput(configuration::IConfiguration::Pointer configuration)
-                    : VideoOutput(std::move(configuration)), isActive_(false), frameCount_(0), droppedFrames_(0), codec_(nullptr), codecCtx_(nullptr), parser_(nullptr), packet_(nullptr), frame_(nullptr), hwDeviceCtx_(nullptr), displayedFrame_(nullptr), previousDisplayedFrame_(nullptr), swsCtx_(nullptr), swDumbHandle_(0), swDumbFbId_(0), swDumbMap_(nullptr), swDumbSize_(0), drmFd_(-1), connectorId_(0), crtcId_(0), planeId_(0), drmInitialized_(false), usingHwAccel_(false), currentFbId_(0), previousFbId_(0), currentHandle_(0), previousHandle_(0)
+                    : VideoOutput(std::move(configuration)), isActive_(false), frameCount_(0), droppedFrames_(0), codec_(nullptr), codecCtx_(nullptr), parser_(nullptr), packet_(nullptr), frame_(nullptr), hwDeviceCtx_(nullptr), displayedFrame_(nullptr), previousDisplayedFrame_(nullptr), swsCtx_(nullptr), swDumbHandle_(0), swDumbFbId_(0), swDumbMap_(nullptr), swDumbSize_(0), swDumbPitch_(0), drmFd_(-1), connectorId_(0), crtcId_(0), planeId_(0), drmInitialized_(false), usingHwAccel_(false), currentFbId_(0), previousFbId_(0), currentHandle_(0), previousHandle_(0)
                 {
                     memset(&mode_, 0, sizeof(mode_));
 
@@ -449,7 +449,7 @@ namespace f1x
                     OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Initializing DRM display";
 
                     // Open DRM device
-                    drmFd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+                    drmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
                     if (drmFd_ < 0)
                     {
                         OPENAUTO_LOG(error) << "[FFmpegDrmVideoOutput] Failed to open /dev/dri/card0: " << strerror(errno);
@@ -1342,7 +1342,7 @@ namespace f1x
 
                     OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Initializing DRM hardware cursor";
 
-                    cursorDrmFd_ = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+                    cursorDrmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
                     if (cursorDrmFd_ < 0)
                     {
                         OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Failed to open DRM for cursor";

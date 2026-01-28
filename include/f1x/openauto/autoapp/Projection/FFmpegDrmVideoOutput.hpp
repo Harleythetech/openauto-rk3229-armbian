@@ -262,6 +262,7 @@ namespace f1x
                     uint32_t swDumbFbId_;       // Framebuffer ID for SW frames
                     void *swDumbMap_;           // Mapped memory for SW frames
                     size_t swDumbSize_;         // Size of mapped memory
+                    uint32_t swDumbPitch_;      // Stride of dumb buffer (64-byte aligned)
 
                     // DRM display state
                     int drmFd_;

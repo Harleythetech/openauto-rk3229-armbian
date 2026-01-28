@@ -49,7 +49,34 @@ The V4L2 stateless decoder requires additional setup. Follow this guide to enabl
 
 - [V4L2-request Hardware Video Decoding for Rockchip/Allwinner](https://forum.armbian.com/topic/32449-repository-for-v4l2request-hardware-video-decoding-rockchip-allwinner/)
 
-This is required for the `v4l2slh264dec` GStreamer element to work properly.
+This is required for hardware video decoding to work properly.
+
+### Building
+
+For detailed build instructions including dependencies and cross-compilation, see **[BUILD.md](BUILD.md)**.
+
+#### Quick Start (Native Build on Device)
+
+```bash
+# Install dependencies and build
+./build.sh release --auto-deps --package
+```
+
+#### Cross-Compilation
+
+```bash
+# Set up ARM toolchain
+export CROSS_COMPILE=arm-linux-gnueabihf-
+
+# Build with FFmpeg DRM video output (default)
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release \
+      -DNOPI=ON \
+      -DUSE_FFMPEG_DRM=ON \
+      ..
+make -j$(nproc)
+make package
+```
 
 ### ALSA Configuration
 
@@ -98,30 +125,6 @@ pcm.dmix_hdmi {
         1 1
     }
 }
-```
-
-### Building
-
-#### Cross-Compilation (Recommended)
-
-```bash
-# Set up ARM toolchain
-export CROSS_COMPILE=arm-linux-gnueabihf-
-
-# Build with FFmpeg DRM video output (default)
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release \
-      -DNOPI=ON \
-      -DUSE_FFMPEG_DRM=ON \
-      ..
-make -j$(nproc)
-make package
-```
-
-#### Native Build on Device
-
-```bash
-./build.sh release --package
 ```
 
 ### Running
