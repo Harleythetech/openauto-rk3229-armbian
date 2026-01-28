@@ -11,7 +11,7 @@ string(TIMESTAMP OPENAUTO_BUILD_MONTH "%m" UTC)
 string(TIMESTAMP OPENAUTO_BUILD_DAY "%d" UTC)
 
 option(NOPI "Build for Non Raspberry Pi" ON)
-option(USE_KMSSINK "Build with KMS/DRM video output using GStreamer kmssink" ON)
+option(USE_FFMPEG_DRM "Build with FFmpeg DRM hwaccel + DRM Prime output (lowest latency)" ON)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -83,20 +83,25 @@ else()
     set(ILCLIENT_LIBRARIES "/opt/vc/src/hello_pi/libs/ilclient/libilclient.a;/opt/vc/lib/libvcos.so;/opt/vc/lib/libvcilcs.a;/opt/vc/lib/libvchiq_arm.so")
 endif ()
 
-# KMS/DRM video output using GStreamer kmssink
-# Enable with -DUSE_KMSSINK=ON
-if (USE_KMSSINK)
-    message(STATUS "Configuring with KMS/DRM video output (kmssink)")
+# FFmpeg + DRM video output using DRM hwaccel
+# Enable with -DUSE_FFMPEG_DRM=ON (recommended for RK3229 and similar)
+# This provides the lowest latency video output using:
+# - FFmpeg native h264 decoder with DRM hardware acceleration
+# - DRM Prime for zero-copy display output
+# On RK3229: uses "-hwaccel drm -hwaccel_output_format drm_prime" path
+# Note: v4l2_request probe errors during init are benign
+if (USE_FFMPEG_DRM)
+    message(STATUS "Configuring with FFmpeg DRM hwaccel + DRM Prime output (lowest latency)")
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(GSTREAMER REQUIRED gstreamer-1.0>=1.14)
-    pkg_check_modules(GSTREAMER_APP REQUIRED gstreamer-app-1.0>=1.14)
+    pkg_check_modules(LIBAV REQUIRED libavcodec libavformat libavutil libswscale)
     pkg_check_modules(LIBDRM REQUIRED libdrm)
-    add_definitions(-DUSE_KMSSINK)
-    set(GSTREAMER_INCLUDE_DIRS ${GSTREAMER_INCLUDE_DIRS} ${GSTREAMER_APP_INCLUDE_DIRS} ${LIBDRM_INCLUDE_DIRS})
-    set(GSTREAMER_LIBRARIES ${GSTREAMER_LIBRARIES} ${GSTREAMER_APP_LIBRARIES} ${LIBDRM_LIBRARIES})
-    message(STATUS "GStreamer version: ${GSTREAMER_VERSION}")
-    message(STATUS "GStreamer include dirs: ${GSTREAMER_INCLUDE_DIRS}")
-    message(STATUS "GStreamer libraries: ${GSTREAMER_LIBRARIES}")
+    add_definitions(-DUSE_FFMPEG_DRM)
+    set(FFMPEG_INCLUDE_DIRS ${LIBAV_INCLUDE_DIRS} ${LIBDRM_INCLUDE_DIRS})
+    set(FFMPEG_LIBRARIES ${LIBAV_LIBRARIES} ${LIBDRM_LIBRARIES})
+    message(STATUS "FFmpeg libavcodec version: ${LIBAV_libavcodec_VERSION}")
+    message(STATUS "FFmpeg libswscale version: ${LIBAV_libswscale_VERSION}")
+    message(STATUS "FFmpeg include dirs: ${FFMPEG_INCLUDE_DIRS}")
+    message(STATUS "FFmpeg libraries: ${FFMPEG_LIBRARIES}")
     message(STATUS "libdrm version: ${LIBDRM_VERSION}")
 endif ()
 
@@ -138,7 +143,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}
         ${BLKID_INCLUDE_DIRS}
         ${BCM_HOST_INCLUDE_DIRS}
         ${ILCLIENT_INCLUDE_DIRS}
-        ${GSTREAMER_INCLUDE_DIRS}
+        ${FFMPEG_INCLUDE_DIRS}
         ${include_directory}
         ${PROTOBUF_INCLUDE_DIR}
         ${AAP_PROTOBUF_INCLUDE_DIR}
@@ -167,7 +172,7 @@ target_link_libraries(autoapp PUBLIC
         ${Qt5Network_LIBRARIES}
         ${BCM_HOST_LIBRARIES}
         ${ILCLIENT_LIBRARIES}
-        ${GSTREAMER_LIBRARIES}
+        ${FFMPEG_LIBRARIES}
         ${WINSOCK2_LIBRARIES}
         ${RTAUDIO_LIBRARIES}
         ${TAGLIB_LIBRARIES}

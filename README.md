@@ -108,11 +108,11 @@ pcm.dmix_hdmi {
 # Set up ARM toolchain
 export CROSS_COMPILE=arm-linux-gnueabihf-
 
-# Build
+# Build with FFmpeg DRM video output (default)
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release \
       -DNOPI=ON \
-      -DUSE_KMSSINK=ON \
+      -DUSE_FFMPEG_DRM=ON \
       ..
 make -j$(nproc)
 make package

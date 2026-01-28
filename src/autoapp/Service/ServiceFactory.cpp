@@ -40,8 +40,8 @@
 #include <f1x/openauto/autoapp/Service/WifiProjection/WifiProjectionService.hpp>
 #include <f1x/openauto/autoapp/Projection/QtVideoOutput.hpp>
 #include <f1x/openauto/autoapp/Projection/OMXVideoOutput.hpp>
-#ifdef USE_KMSSINK
-#include <f1x/openauto/autoapp/Projection/KmssinkVideoOutput.hpp>
+#ifdef USE_FFMPEG_DRM
+#include <f1x/openauto/autoapp/Projection/FFmpegDrmVideoOutput.hpp>
 #endif
 #include <f1x/openauto/autoapp/Projection/RtAudioOutput.hpp>
 #include <f1x/openauto/autoapp/Projection/QtAudioOutput.hpp>
@@ -181,10 +181,10 @@ namespace f1x::openauto::autoapp::service
     serviceList.emplace_back(
         std::make_shared<mediasink::SystemAudioService>(ioService_, messenger, std::move(systemAudioOutput)));
 
-    // Video output backend selection (priority: KMSSINK > OMX > Qt)
-#ifdef USE_KMSSINK
-    OPENAUTO_LOG(info) << "[ServiceFactory] Using KMS/DRM video output (kmssink)";
-    auto videoOutput(std::make_shared<projection::KmssinkVideoOutput>(configuration_));
+    // Video output backend selection (priority: FFMPEG_DRM > OMX > Qt)
+#ifdef USE_FFMPEG_DRM
+    OPENAUTO_LOG(info) << "[ServiceFactory] Using FFmpeg DRM hwaccel + DRM Prime video output (lowest latency)";
+    auto videoOutput(std::make_shared<projection::FFmpegDrmVideoOutput>(configuration_));
 #elif defined(USE_OMX)
     OPENAUTO_LOG(info) << "[ServiceFactory] Using OMX video output";
     auto videoOutput(std::make_shared<projection::OMXVideoOutput>(configuration_));

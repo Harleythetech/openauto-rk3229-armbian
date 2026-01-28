@@ -20,9 +20,9 @@
 #include <f1x/openauto/autoapp/Projection/IInputDeviceEventHandler.hpp>
 #include <f1x/openauto/autoapp/Projection/InputDevice.hpp>
 
-// Include for DRM cursor support when using KMSSink
-#ifdef USE_KMSSINK
-#include <f1x/openauto/autoapp/Projection/KmssinkVideoOutput.hpp>
+// Include for DRM cursor support when using FFmpeg DRM backend
+#ifdef USE_FFMPEG_DRM
+#include <f1x/openauto/autoapp/Projection/FFmpegDrmVideoOutput.hpp>
 #endif
 
 namespace f1x
@@ -223,9 +223,9 @@ namespace f1x
 
                     QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
 
-                    // Update DRM hardware cursor position (for KMSSink backend)
-#ifdef USE_KMSSINK
-                    KmssinkVideoOutput::updateCursorPosition(mouse->pos().x(), mouse->pos().y());
+                    // Update DRM hardware cursor position (for FFmpeg DRM backend)
+#ifdef USE_FFMPEG_DRM
+                    FFmpegDrmVideoOutput::updateCursorPosition(mouse->pos().x(), mouse->pos().y());
 #endif
 
                     if (event->type() == QEvent::MouseButtonRelease || mouse->buttons().testFlag(Qt::LeftButton))

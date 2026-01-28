@@ -18,13 +18,13 @@
 
 set -e
 
-# Script to build OpenAuto for RK3229/Armbian with KMS/DRM video output
-# This custom build uses GStreamer kmssink for direct DRM plane rendering
-# Usage: ./build.sh [release|debug] [--clean] [--package] [--output-dir DIR] [--no-kmssink]
+# Script to build OpenAuto for RK3229/Armbian with FFmpeg DRM video output
+# This custom build uses FFmpeg DRM hwaccel + DRM Prime for low-latency video
+# Usage: ./build.sh [release|debug] [--clean] [--package] [--output-dir DIR]
 
 # Default values
 NOPI_FLAG="-DNOPI=ON"
-USE_KMSSINK_FLAG="-DUSE_KMSSINK=ON"  # Enable KMS/DRM video output by default
+USE_FFMPEG_DRM_FLAG="-DUSE_FFMPEG_DRM=ON"  # Enable FFmpeg DRM video output by default
 AUTO_DEPS=false  # Auto-install dependencies without prompting
 CLEAN_BUILD=false
 PACKAGE=false
@@ -63,10 +63,6 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_DIR="$2"
             shift 2
             ;;
-        --no-kmssink)
-            USE_KMSSINK_FLAG="-DUSE_KMSSINK=OFF"
-            shift
-            ;;
         --auto-deps)
             AUTO_DEPS=true
             shift
@@ -74,7 +70,7 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "Usage: $0 [release|debug] [OPTIONS]"
             echo ""
-            echo "OpenAuto build script for RK3229/Armbian with KMS/DRM video output"
+            echo "OpenAuto build script for RK3229/Armbian with FFmpeg DRM video output"
             echo ""
             echo "Build types:"
             echo "  release        Build release version (default on main/master branch)"
@@ -84,19 +80,17 @@ while [[ $# -gt 0 ]]; do
             echo "  --clean        Clean build directory before building"
             echo "  --package      Create DEB packages after building"
             echo "  --output-dir   Directory to copy packages (default: /output)"
-            echo "  --no-kmssink   Disable KMS/DRM video output (use Qt video output instead)"
             echo "  --auto-deps    Automatically install missing dependencies without prompting"
             echo "  --help         Show this help message"
             echo ""
             echo "Target Platform: RK3229 (Rockchip) on Armbian"
-            echo "Video Backend: GStreamer kmssink (KMS/DRM direct plane rendering)"
+            echo "Video Backend: FFmpeg DRM hwaccel + DRM Prime (lowest latency)"
             echo ""
             echo "Required dependencies (auto-installed with --auto-deps):"
             echo "  Qt5:       qtbase5-dev, qtmultimedia5-dev, qtconnectivity5-dev"
             echo "  Bluetooth: bluez, libbluetooth-dev"
             echo "  Audio:     librtaudio-dev"
-            echo "  GStreamer: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good,"
-            echo "             gstreamer1.0-plugins-bad, gstreamer1.0-libav"
+            echo "  FFmpeg:    libavcodec-dev, libavformat-dev, libavutil-dev, libswscale-dev"
             echo "  DRM:       libdrm-dev"
             echo "  Other:     libtag1-dev, libblkid-dev, libgps-dev, libusb-1.0-0-dev,"
             echo "             libssl-dev, libprotobuf-dev, libboost-all-dev"
@@ -105,7 +99,6 @@ while [[ $# -gt 0 ]]; do
             echo "  $0 release --package"
             echo "  $0 debug --clean"
             echo "  $0 release --package --output-dir ./packages"
-            echo "  $0 release --no-kmssink    # Build without KMS/DRM (fallback to Qt)"
             echo "  $0 release --auto-deps     # Auto-install dependencies and build"
             exit 0
             ;;
@@ -134,7 +127,7 @@ echo "Source directory: ${SOURCE_DIR}"
 echo "Build directory: ${BUILD_DIR}"
 echo "Build type: ${CMAKE_BUILD_TYPE}"
 echo "NOPI: ON (no Pi hardware dependencies)"
-echo "USE_KMSSINK: $([ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ] && echo "ON (KMS/DRM video output)" || echo "OFF (Qt video output)")"
+echo "USE_FFMPEG_DRM: ON (FFmpeg DRM hwaccel + DRM Prime output)"
 echo "Package: ${PACKAGE}"
 
 # Clean build directory if requested
@@ -225,37 +218,23 @@ if command -v pkg-config &> /dev/null; then
     fi
 fi
 
-# Check for GStreamer/DRM dependencies (only needed for KMS/DRM build)
-if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
-    # Check for GStreamer development libraries
-    if command -v pkg-config &> /dev/null; then
-        if ! pkg-config --exists gstreamer-1.0 2>/dev/null; then
-            MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libgstreamer1.0-dev"
-        fi
-        if ! pkg-config --exists gstreamer-app-1.0 2>/dev/null; then
-            MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libgstreamer-plugins-base1.0-dev"
-        fi
-        # Check for libdrm
-        if ! pkg-config --exists libdrm 2>/dev/null; then
-            MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libdrm-dev"
-        fi
+# Check for FFmpeg/DRM dependencies (needed for FFmpeg DRM build)
+if command -v pkg-config &> /dev/null; then
+    if ! pkg-config --exists libavcodec 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libavcodec-dev"
     fi
-    
-    # Check for GStreamer runtime plugins (needed for kmssink and H.264 decoding)
-    if command -v gst-inspect-1.0 &> /dev/null; then
-        if ! gst-inspect-1.0 kmssink &>/dev/null; then
-            MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-bad"
-        fi
-        if ! gst-inspect-1.0 h264parse &>/dev/null; then
-            MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-bad"
-        fi
-        # Check for at least one H.264 decoder
-        if ! gst-inspect-1.0 avdec_h264 &>/dev/null && ! gst-inspect-1.0 openh264dec &>/dev/null; then
-            MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-libav"
-        fi
-    else
-        # gst-inspect not available, assume we need base plugins
-        MISSING_RUNTIME_DEPS="${MISSING_RUNTIME_DEPS} gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav"
+    if ! pkg-config --exists libavformat 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libavformat-dev"
+    fi
+    if ! pkg-config --exists libavutil 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libavutil-dev"
+    fi
+    if ! pkg-config --exists libswscale 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libswscale-dev"
+    fi
+    # Check for libdrm
+    if ! pkg-config --exists libdrm 2>/dev/null; then
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} libdrm-dev"
     fi
 fi
 
@@ -405,8 +384,8 @@ if [ -n "$NOPI_FLAG" ]; then
     CMAKE_ARGS+=("${NOPI_FLAG}")
 fi
 
-if [ -n "$USE_KMSSINK_FLAG" ]; then
-    CMAKE_ARGS+=("${USE_KMSSINK_FLAG}")
+if [ -n "$USE_FFMPEG_DRM_FLAG" ]; then
+    CMAKE_ARGS+=("${USE_FFMPEG_DRM_FLAG}")
 fi
 
 if [ -n "$DISTRO_DEB_RELEASE" ]; then
@@ -456,13 +435,9 @@ echo "=== Build Summary ==="
 echo "Target platform: RK3229/Armbian"
 echo "Build type: ${CMAKE_BUILD_TYPE}"
 echo "Build directory: ${BUILD_DIR}"
-if [ "$USE_KMSSINK_FLAG" = "-DUSE_KMSSINK=ON" ]; then
-    echo "Video output: KMS/DRM (GStreamer kmssink)"
-    echo "  - Uses hardware H.264 decoding (v4l2slh264dec/v4l2h264dec)"
-    echo "  - Direct DRM plane rendering (no compositor needed)"
-else
-    echo "Video output: Qt Multimedia"
-fi
+echo "Video output: FFmpeg DRM hwaccel + DRM Prime (lowest latency)"
+echo "  - Uses hardware H.264 decoding via DRM hwaccel"
+echo "  - Zero-copy DRM Prime output (no compositor needed)"
 if [ -f "${BUILD_DIR}/bin/autoapp" ]; then
     echo "Binary: ${BUILD_DIR}/bin/autoapp"
 elif [ -f "${BUILD_DIR}/autoapp" ]; then

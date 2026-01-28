@@ -24,7 +24,7 @@ After=getty@tty2.service
 
 [Service]
 Type=simple
-# Use launcher script that configures linuxfb, kmssink, and RTAudio
+# Use launcher script that configures linuxfb, DRM, and RTAudio
 ExecStart=/opt/openauto/openauto.sh
 Restart=on-failure
 RestartSec=5s
@@ -44,9 +44,8 @@ Environment="QT_QPA_FB_NO_LIBINPUT=0"
 # Library path for custom dependencies (aasdk, aap_protobuf, etc.)
 Environment="LD_LIBRARY_PATH=/opt/openauto/lib:/usr/local/lib"
 
-# GStreamer kmssink configuration for RK3229
-Environment="GST_DEBUG=2"
-Environment="GST_PLUGIN_PATH=/usr/lib/arm-linux-gnueabihf/gstreamer-1.0"
+# FFmpeg DRM configuration for RK3229
+Environment="LIBVA_DRIVER_NAME=radeonsi"
 
 # RTAudio ALSA configuration (bypass PulseAudio)
 Environment="RTAUDIO_API=alsa"
