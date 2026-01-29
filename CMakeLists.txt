@@ -350,11 +350,18 @@ set(CPACK_DEBIAN_PACKAGE_MAINTAINER "OpenCarDev Team <opencardevuk@gmail.com>")
 set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
 set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
 set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/opencardev/openauto")
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 
 # Explicit dependencies for GStreamer video codec support and Qt Multimedia backend
 # These are required for H.264/H.265 video decoding from Android Auto via QtVideoOutput
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5multimedia5, libqt5multimedia5-plugins, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, gstreamer1.0-plugins-bad, gstreamer1.0-plugins-ugly")
+if (USE_FFMPEG_DRM)
+    # Target FFmpeg 5.1 (Debian Bookworm) dependencies for the RK3229
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libavcodec59, libavutil57, libswscale6, libswresample4, libdrm2, libqt5gui5, libqt5multimedia5, libqt5multimedia5-plugins")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
+else()
+    # Fallback for standard builds
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5multimedia5, libqt5multimedia5-plugins, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+endif()
 
 # Debian package control scripts
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
