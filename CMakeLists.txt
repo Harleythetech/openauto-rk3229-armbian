@@ -39,6 +39,20 @@ if(NOT CMAKE_BUILD_TYPE)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
+# Set RPATH to include FFmpeg 5.1 libraries from RK322x sysroot
+# This ensures the binary loads the correct FFmpeg version at runtime
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+# Add the FFmpeg library path - will be populated by build.sh if sysroot is used
+if(DEFINED ENV{RK322X_SYSROOT})
+    list(APPEND CMAKE_INSTALL_RPATH "$ENV{RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf")
+    message(STATUS "Adding FFmpeg RPATH: $ENV{RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf")
+endif()
+list(APPEND CMAKE_INSTALL_RPATH "/opt/rk322x-sysroot/usr/lib/arm-linux-gnueabihf")
+list(APPEND CMAKE_INSTALL_RPATH "/opt/openauto/lib")
+list(APPEND CMAKE_INSTALL_RPATH "/usr/local/qt5/lib")
+
 # Paths
 set(resources_directory ${CMAKE_CURRENT_SOURCE_DIR}/assets)
 set(sources_directory ${CMAKE_CURRENT_SOURCE_DIR}/src)

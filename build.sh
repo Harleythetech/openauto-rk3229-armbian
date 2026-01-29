@@ -524,6 +524,8 @@ if [ "$RK322X_SYSROOT_AVAILABLE" = true ] && [ -d "${RK322X_SYSROOT}/usr" ]; the
 fi
 
 # Run CMake configuration
+# Run CMake configuration with RK322X_SYSROOT environment variable
+export RK322X_SYSROOT="${RK322X_SYSROOT}"
 env DISTRO_DEB_RELEASE="${DISTRO_DEB_RELEASE}" cmake "${CMAKE_ARGS[@]}"
 
 # Build
