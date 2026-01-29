@@ -367,6 +367,103 @@ if [ -d "/usr/local/lib" ]; then
     cp -v /usr/local/lib/libaap_protobuf*.so* "${SOURCE_DIR}/deps/lib/" 2>/dev/null || true
 fi
 
+# =============================================================================
+# RK322x Sysroot Setup - FFmpeg 5.1 with V4L2 Request API
+# =============================================================================
+# This section downloads and extracts the high-performance FFmpeg 5.1 libraries
+# with V4L2 Request API support for RK3229 hardware video decoding.
+# The libraries are installed into an isolated sysroot to avoid breaking the
+# host system's FFmpeg installation.
+
+RK322X_SYSROOT="/opt/rk322x-sysroot"
+FFMPEG_DEB_URL="http://apt.undo.it:7242/pool/main/f/ffmpeg"
+
+# List of FFmpeg 5.1 packages to download
+FFMPEG_DEBS=(
+    "libavcodec-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavcodec59_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavutil-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavutil57_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libswscale-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libswscale6_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+)
+
+setup_rk322x_sysroot() {
+    echo ""
+    echo "=== Setting up RK322x FFmpeg 5.1 Sysroot ==="
+    echo "Sysroot directory: ${RK322X_SYSROOT}"
+    
+    # Check if sysroot already exists and has the libraries
+    if [ -d "${RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf" ] && \
+       [ -f "${RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf/libavcodec.so" ]; then
+        echo "RK322x sysroot already exists, skipping download."
+        return 0
+    fi
+    
+    # Determine how to create the sysroot directory (may need sudo)
+    if [ "$(id -u)" -eq 0 ]; then
+        SYSROOT_CMD=""
+    elif command -v sudo &> /dev/null; then
+        SYSROOT_CMD="sudo"
+    else
+        echo "Warning: Cannot create ${RK322X_SYSROOT} without sudo or root."
+        echo "Please create it manually: sudo mkdir -p ${RK322X_SYSROOT}"
+        return 1
+    fi
+    
+    # Create sysroot directory
+    echo "Creating sysroot directory..."
+    ${SYSROOT_CMD} mkdir -p "${RK322X_SYSROOT}"
+    
+    # Create temporary directory for downloads
+    TEMP_DEB_DIR=$(mktemp -d)
+    echo "Downloading FFmpeg 5.1 packages to ${TEMP_DEB_DIR}..."
+    
+    # Download all FFmpeg packages
+    for deb in "${FFMPEG_DEBS[@]}"; do
+        echo "  Downloading ${deb}..."
+        if ! wget -q --show-progress -P "${TEMP_DEB_DIR}" "${FFMPEG_DEB_URL}/${deb}"; then
+            echo "Warning: Failed to download ${deb}"
+            # Try without --show-progress for older wget versions
+            wget -P "${TEMP_DEB_DIR}" "${FFMPEG_DEB_URL}/${deb}" || {
+                echo "Error: Failed to download ${deb}"
+                rm -rf "${TEMP_DEB_DIR}"
+                return 1
+            }
+        fi
+    done
+    
+    # Extract all packages into the sysroot
+    echo ""
+    echo "Extracting packages into ${RK322X_SYSROOT}..."
+    for deb in "${FFMPEG_DEBS[@]}"; do
+        echo "  Extracting ${deb}..."
+        ${SYSROOT_CMD} dpkg-deb -x "${TEMP_DEB_DIR}/${deb}" "${RK322X_SYSROOT}"
+    done
+    
+    # Clean up temporary directory
+    rm -rf "${TEMP_DEB_DIR}"
+    
+    echo ""
+    echo "RK322x sysroot setup complete."
+    echo "  Include path: ${RK322X_SYSROOT}/usr/include/arm-linux-gnueabihf"
+    echo "  Library path: ${RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf"
+    
+    return 0
+}
+
+# Set up the sysroot
+if ! setup_rk322x_sysroot; then
+    echo ""
+    echo "Warning: Failed to set up RK322x sysroot. Build may fail or use system FFmpeg."
+    echo "You can manually set up the sysroot by running:"
+    echo "  sudo mkdir -p ${RK322X_SYSROOT}"
+    echo "  # Download and extract FFmpeg debs from ${FFMPEG_DEB_URL}"
+    RK322X_SYSROOT_AVAILABLE=false
+else
+    RK322X_SYSROOT_AVAILABLE=true
+fi
+
 # Configure CMake
 echo ""
 echo "Configuring with CMake..."
@@ -393,6 +490,28 @@ if [ -n "$DISTRO_DEB_RELEASE" ]; then
 fi
 
 CMAKE_ARGS+=(-DCPACK_PROJECT_CONFIG_FILE="${SOURCE_DIR}/cmake_modules/CPackProjectConfig.cmake")
+
+# Add RK322x sysroot paths if available
+if [ "$RK322X_SYSROOT_AVAILABLE" = true ] && [ -d "${RK322X_SYSROOT}/usr" ]; then
+    echo ""
+    echo "Using RK322x sysroot for FFmpeg 5.1 libraries"
+    CMAKE_ARGS+=(
+        -DCMAKE_PREFIX_PATH="${RK322X_SYSROOT}/usr"
+        -DCMAKE_INCLUDE_PATH="${RK322X_SYSROOT}/usr/include/arm-linux-gnueabihf"
+        -DCMAKE_LIBRARY_PATH="${RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf"
+    )
+    
+    # Set package dependencies for FFmpeg 5.1 runtime libraries
+    # Disable automatic shlibdeps to prevent Ubuntu's dpkg-shlibdeps from
+    # trying to find the old system FFmpeg libraries
+    CMAKE_ARGS+=(
+        -DCPACK_DEBIAN_PACKAGE_DEPENDS="libavcodec59, libavutil57, libswscale6, libdrm2, libqt5gui5"
+        -DCPACK_DEBIAN_PACKAGE_SHLIBDEPS=OFF
+    )
+    
+    # Also set PKG_CONFIG_PATH to find the sysroot's .pc files
+    export PKG_CONFIG_PATH="${RK322X_SYSROOT}/usr/lib/arm-linux-gnueabihf/pkgconfig:${PKG_CONFIG_PATH}"
+fi
 
 # Run CMake configuration
 env DISTRO_DEB_RELEASE="${DISTRO_DEB_RELEASE}" cmake "${CMAKE_ARGS[@]}"
@@ -438,6 +557,9 @@ echo "Build directory: ${BUILD_DIR}"
 echo "Video output: FFmpeg DRM hwaccel + DRM Prime (lowest latency)"
 echo "  - Uses hardware H.264 decoding via DRM hwaccel"
 echo "  - Zero-copy DRM Prime output (no compositor needed)"
+if [ "$RK322X_SYSROOT_AVAILABLE" = true ]; then
+    echo "FFmpeg sysroot: ${RK322X_SYSROOT} (FFmpeg 5.1 with V4L2 Request API)"
+fi
 if [ -f "${BUILD_DIR}/bin/autoapp" ]; then
     echo "Binary: ${BUILD_DIR}/bin/autoapp"
 elif [ -f "${BUILD_DIR}/autoapp" ]; then
