@@ -382,10 +382,20 @@ FFMPEG_DEB_URL="http://apt.undo.it:7242/pool/main/f/ffmpeg"
 FFMPEG_DEBS=(
     "libavcodec-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
     "libavcodec59_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavdevice-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavdevice59_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavfilter-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavfilter8_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavformat-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libavformat59_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
     "libavutil-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
     "libavutil57_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libswresample-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libswresample4_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
     "libswscale-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
     "libswscale6_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libpostproc-dev_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
+    "libpostproc56_5.1.8-0+deb12u1-v4l2request1_armhf.deb"
 )
 
 setup_rk322x_sysroot() {
