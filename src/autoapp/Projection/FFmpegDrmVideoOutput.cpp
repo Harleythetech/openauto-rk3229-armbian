@@ -800,15 +800,33 @@ namespace f1x
                             while (true)
                             {
                                 ret = avcodec_receive_frame(codecCtx_, frame_);
-                                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+                                
+                                // VPU driver negotiation phase: EAGAIN and ENOBUFS are expected during init
+                                // These are NOT errors - the driver is still setting up the format
+                                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF || ret == AVERROR(ENOBUFS) || ret == -105)
                                 {
+                                    // Silently break and wait for next packet (normal behavior during negotiation)
                                     break;
                                 }
+                                
                                 if (ret < 0)
                                 {
                                     char errBuf[256];
                                     av_strerror(ret, errBuf, sizeof(errBuf));
                                     OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Receive frame error: " << errBuf;
+                                    break;
+                                }
+
+                                // Validate frame dimensions before attempting to display
+                                // This prevents crashes when driver hasn't fully negotiated format yet
+                                if (frame_->width <= 0 || frame_->height <= 0)
+                                {
+                                    if (frameCount_ < 5)
+                                    {
+                                        OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Invalid frame dimensions: "
+                                                               << frame_->width << "x" << frame_->height;
+                                    }
+                                    av_frame_unref(frame_);
                                     break;
                                 }
 
@@ -850,6 +868,14 @@ namespace f1x
                         // ================================================================
                         // HARDWARE ACCELERATED PATH (DRM Prime / Zero-Copy)
                         // ================================================================
+
+                        // CRITICAL: Check frame->data[0] is not null before casting
+                        // During VPU driver negotiation, this can be null and cause segfault
+                        if (frame->data[0] == nullptr)
+                        {
+                            OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] DRM Prime frame data is null (driver negotiation in progress)";
+                            return false;
+                        }
 
                         // Get DRM frame descriptor
                         AVDRMFrameDescriptor *desc = (AVDRMFrameDescriptor *)frame->data[0];

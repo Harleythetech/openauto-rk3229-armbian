@@ -1,117 +1,33 @@
-# * Project: OpenAuto
-# * This file is part of openauto project.
-# * Copyright (C) 2025 OpenCarDev Team
-# *
-# *  openauto is free software: you can redistribute it and/or modify
-# *  it under the terms of the GNU General Public License as published by
-# *  the Free Software Foundation; either version 3 of the License, or
-# *  (at your option) any later version.
-# *
-# *  openauto is distributed in the hope that it will be useful,
-# *  but WITHOUT ANY WARRANTY; without even the implied warranty of
-# *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# *  GNU General Public License for more details.
-# *
-# *  You should have received a copy of the GNU General Public License
-# *  along with openauto. If not, see <http://www.gnu.org/licenses/>.
+# Use the official armhf Bookworm image for native binary compatibility
+FROM --platform=linux/arm/v7 debian:bookworm
 
-# Multi-stage build for OpenAuto with native compilation for each architecture
-# This Dockerfile builds OpenAuto natively on each target platform using QEMU emulation
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Allow selecting Debian base (bookworm or trixie). Default to trixie.
-ARG DEBIAN_VERSION=trixie
-FROM debian:${DEBIAN_VERSION}-slim
-
-# Build arguments
-ARG TARGET_ARCH=amd64
-ARG BUILD_TYPE=release
-ARG DEBIAN_FRONTEND=noninteractive
-
-# Set locale to avoid encoding issues
-ENV LANG=C.UTF-8
-ENV LC_ALL=C.UTF-8
-
-# Install build dependencies and tools
+# 1. Install prerequisites for adding secure repositories
 RUN apt-get update && apt-get install -y \
-    # Core build tools
-    build-essential \
-    cmake \
-    pkg-config \
-    git \
-    lsb-release \
-    curl \
+    wget \
     gnupg \
     ca-certificates \
-    # Development libraries
-    libboost-system-dev \
-    libboost-log-dev \
-    libprotobuf-dev \
-    protobuf-compiler \
-    libusb-1.0-0-dev \
-    libssl-dev \
-    libblkid-dev \
-    libgps-dev \
-    libtag1-dev \
-    librtaudio-dev \
-    # Qt5 dependencies
-    qtbase5-dev \
-    qtmultimedia5-dev \
-    qttools5-dev \
-    qttools5-dev-tools \
-    qtconnectivity5-dev \
-    # Packaging tools
-    file \
-    dpkg-dev \
-    fakeroot \
     && rm -rf /var/lib/apt/lists/*
 
-# Add OpenCarDev APT repository for libaasdk
-ARG DEBIAN_VERSION
-RUN install -d -m 0755 /etc/apt/keyrings && \
-        curl -fsSL https://opencardev.github.io/packages/opencardev.gpg.key -o /etc/apt/keyrings/opencardev.gpg && \
-        chmod 0644 /etc/apt/keyrings/opencardev.gpg && \
-        echo "deb [signed-by=/etc/apt/keyrings/opencardev.gpg] https://opencardev.github.io/packages ${DEBIAN_VERSION} main" > /etc/apt/sources.list.d/opencardev.list && \
-        # Temporary safety: if requested distro is not yet published in APT repo, fall back to trixie
-        if ! curl -fsSL "https://opencardev.github.io/packages/dists/${DEBIAN_VERSION}/Release" >/dev/null; then \
-            echo "WARNING: OpenCarDev APT repo does not have '${DEBIAN_VERSION}'. Falling back to 'trixie' for libaasdk."; \
-            echo "deb [signed-by=/etc/apt/keyrings/opencardev.gpg] https://opencardev.github.io/packages trixie main" > /etc/apt/sources.list.d/opencardev.list; \
-        fi
+# 2. Add the custom RK322x repository and GPG key
+RUN wget -q http://apt.undo.it:7242/apt.undo.it.asc -O /etc/apt/trusted.gpg.d/apt.undo.it.asc && \
+    echo "deb http://apt.undo.it:7242 bookworm main" | tee /etc/apt/sources.list.d/apt.undo.it.list
 
-# Install libaasdk from APT repository (attempt selected distro, fall back to trixie if not yet published)
-RUN set -eux; \
-    if ! apt-get update; then \
-      echo "WARNING: APT update failed for ${DEBIAN_VERSION}. Falling back to 'trixie' for libaasdk source."; \
-      echo "deb [signed-by=/etc/apt/keyrings/opencardev.gpg] https://opencardev.github.io/packages trixie main" > /etc/apt/sources.list.d/opencardev.list; \
-      apt-get update; \
-    fi; \
-    if apt-cache show libaasdk >/dev/null 2>&1 && apt-cache show libaasdk-dev >/dev/null 2>&1; then \
-        echo "Installing libaasdk and libaasdk-dev together"; \
-        apt-get install -y --no-install-recommends libaasdk libaasdk-dev; \
-    else \
-        echo "ERROR: No libaasdk or libaasdk-dev package found"; \
-        apt-cache search libaasdk || true; \
-        exit 1; \
-    fi && \
-    apt-get clean && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+# 3. Set APT pinning to ensure the modified FFmpeg/MPV take precedence
+RUN echo "Package: *\nPin: release o=apt.undo.it\nPin-Priority: 600" > /etc/apt/preferences.d/apt-undo-it
 
-# Set working directory
-WORKDIR /src
+# 4. Install all dependencies, including the modified FFmpeg and MPV
+# This also installs transitive dependencies like libdav1d6 and libx264 natively
+RUN apt-get update && apt-get install -y \
+    build-essential cmake pkg-config git \
+    ffmpeg mpv \
+    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libdrm-dev \
+    qtbase5-dev qtmultimedia5-dev qtconnectivity5-dev \
+    librtaudio-dev libtag1-dev libblkid-dev libgps-dev \
+    libusb-1.0-0-dev libssl-dev libprotobuf-dev protobuf-compiler \
+    libboost-all-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy source code
-COPY . .
-
-# Debug: List what was copied
-RUN echo "Contents of /src:" && ls -la
-
-# Create output directory for packages
-RUN mkdir -p /output
-
-# Make build script executable
-RUN chmod +x /src/build.sh
-
-# Build OpenAuto using unified build script
-RUN /src/build.sh ${BUILD_TYPE} --package --output-dir /output
-
-# Default command
-CMD ["bash", "-c", "echo 'OpenAuto build container ready. Packages are in /output/'"]
-
+WORKDIR /build

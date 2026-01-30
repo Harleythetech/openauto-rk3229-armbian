@@ -8,3 +8,7 @@ CMakeLists.txt.user
 /cmake-build-*/
 .idea/
 RELEASE_NOTES.md
+Dockerfile
+openauto_2026.01.30+git.c07bc2a.dirty_deb12u1_armhf.deb
+openauto.sh
+
