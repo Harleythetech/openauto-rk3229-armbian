@@ -338,7 +338,8 @@ namespace f1x
                         return false;
                     }
 
-                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using decoder: " << codec_->name << " with DRM hwaccel";
+                    const char* decoderName = (codec_ && codec_->name) ? codec_->name : "h264";
+                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using decoder: " << decoderName << " with DRM hwaccel";
 
                     // Create codec context
                     codecCtx_ = avcodec_alloc_context3(codec_);
@@ -449,8 +450,13 @@ namespace f1x
                         return false;
                     }
 
-                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Decoder initialized: " << codec_->name
-                                       << ", pixel format: " << av_get_pix_fmt_name(codecCtx_->pix_fmt);
+                    // CRITICAL: Protect against NULL pointers in logging
+                    const char* codecName = (codec_ && codec_->name) ? codec_->name : "unknown";
+                    const char* pixFmtName = av_get_pix_fmt_name(codecCtx_->pix_fmt);
+                    if (!pixFmtName) pixFmtName = "unknown";
+                    
+                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Decoder initialized: " << codecName
+                                       << ", pixel format: " << pixFmtName;
                     return true;
                 }
 
@@ -1041,8 +1047,10 @@ namespace f1x
                 {
                     if (frameCount_ < 5)
                     {
+                        const char* swPixFmt = av_get_pix_fmt_name((AVPixelFormat)frame->format);
+                        if (!swPixFmt) swPixFmt = "unknown";
                         OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Software decode path: "
-                                           << av_get_pix_fmt_name((AVPixelFormat)frame->format)
+                                           << swPixFmt
                                            << " " << frame->width << "x" << frame->height;
                     }
 
