@@ -126,7 +126,7 @@ void Configuration::load() {
     hideMenuToggle_ = iniConfig.get<bool>(cGeneralHideMenuToggleKey, false);
     hideAlpha_ = iniConfig.get<bool>(cGeneralHideAlphaKey, false);
     showLux_ = iniConfig.get<bool>(cGeneralShowLuxKey, false);
-    showCursor_ = iniConfig.get<bool>(cGeneralShowCursorKey, false);
+    showCursor_ = iniConfig.get<bool>(cGeneralShowCursorKey, true);
     hideBrightnessControl_ =
         iniConfig.get<bool>(cGeneralHideBrightnessControlKey, false);
     hideWarning_ = iniConfig.get<bool>(cGeneralHideWarningKey, false);
@@ -202,7 +202,7 @@ void Configuration::reset() {
   hideMenuToggle_ = false;
   hideAlpha_ = false;
   showLux_ = false;
-  showCursor_ = false;
+  showCursor_ = true;
   hideBrightnessControl_ = false;
   hideWarning_ = false;
   showNetworkinfo_ = false;
