@@ -144,13 +144,13 @@ void Configuration::load() {
       aap_protobuf::service::media::sink::message::VideoFrameRateType>(
       settings
           .value("FPS", aap_protobuf::service::media::sink::message::
-                            VideoFrameRateType::VIDEO_60FPS)
+                            VideoFrameRateType_VIDEO_60FPS)
           .toInt());
   videoResolution_ = static_cast<
       aap_protobuf::service::media::sink::message::VideoCodecResolutionType>(
       settings
           .value("Resolution", aap_protobuf::service::media::sink::message::
-                                   VideoCodecResolutionType::VIDEO_800x480)
+                                   VideoCodecResolutionType_VIDEO_800x480)
           .toInt());
   screenDPI_ = settings.value("DPI", 160).toUInt();
   omxLayerIndex_ = settings.value("OMXLayerIndex", 2).toInt();
@@ -184,13 +184,13 @@ void Configuration::load() {
   settings.endGroup();
 
   settings.beginGroup("Audio");
-  musicAudioChannelEnabled_ =
+  _audioChannelEnabledMedia =
       settings.value("MusicAudioChannelEnabled", true).toBool();
-  guidanceAudioChannelEnabled_ =
+  _audioChannelEnabledGuidance =
       settings.value("GuidanceAudioChannelEnabled", true).toBool();
-  systemAudioChannelEnabled_ =
+  _audioChannelEnabledSystem =
       settings.value("SystemAudioChannelEnabled", true).toBool();
-  telephonyAudioChannelEnabled_ =
+  _audioChannelEnabledTelephony =
       settings.value("TelephonyAudioChannelEnabled", false).toBool();
   audioOutputDeviceName_ =
       settings.value("AudioOutputDeviceName", "").toString().toStdString();
@@ -199,8 +199,8 @@ void Configuration::load() {
   settings.endGroup();
 
   settings.beginGroup("Input");
-  touchscreenEnabled_ = settings.value("TouchscreenEnabled", true).toBool();
-  playerButtonControl_ = settings.value("PlayerButtonControl", false).toBool();
+  enableTouchscreen_ = settings.value("TouchscreenEnabled", true).toBool();
+  enablePlayerControl_ = settings.value("PlayerButtonControl", false).toBool();
 
   int size = settings.beginReadArray("Buttons");
   for (int i = 0; i < size; ++i) {
@@ -240,22 +240,22 @@ void Configuration::load() {
 }
 
 void Configuration::reset() {
-  videoFPS_ = aap_protobuf::service::media::sink::message::VideoFrameRateType::
-      VIDEO_60FPS;
+  videoFPS_ = aap_protobuf::service::media::sink::message::
+      VideoFrameRateType_VIDEO_60FPS;
   videoResolution_ = aap_protobuf::service::media::sink::message::
-      VideoCodecResolutionType::VIDEO_800x480;
+      VideoCodecResolutionType_VIDEO_800x480;
   screenDPI_ = 160;
   omxLayerIndex_ = 2;
   videoMargins_ = QRect(0, 0, 0, 0);
   handednessOfTrafficType_ = HandednessOfTrafficType::RIGHT_HAND_DRIVE;
-  touchscreenEnabled_ = true;
+  enableTouchscreen_ = true;
   bluetoothAdapterType_ = BluetoothAdapterType::LOCAL;
   bluetoothAdapterAddress_ = "";
   wirelessProjectionEnabled_ = false;
-  musicAudioChannelEnabled_ = true;
-  guidanceAudioChannelEnabled_ = true;
-  systemAudioChannelEnabled_ = true;
-  telephonyAudioChannelEnabled_ = false;
+  _audioChannelEnabledMedia = true;
+  _audioChannelEnabledGuidance = true;
+  _audioChannelEnabledSystem = true;
+  _audioChannelEnabledTelephony = false;
   buttonCodes_.clear();
   showClock_ = false;
   showBigClock_ = false;
@@ -279,7 +279,8 @@ void Configuration::reset() {
 }
 
 void Configuration::save() {
-  QSettings settings(kConfigurationFile, QSettings::IniFormat);
+  QSettings settings(QString::fromStdString(cConfigFileName),
+                     QSettings::IniFormat);
 
   settings.beginGroup("Video");
   settings.setValue("FPS", static_cast<int>(videoFPS_));
@@ -306,12 +307,12 @@ void Configuration::save() {
   settings.endGroup();
 
   settings.beginGroup("Audio");
-  settings.setValue("MusicAudioChannelEnabled", musicAudioChannelEnabled_);
+  settings.setValue("MusicAudioChannelEnabled", _audioChannelEnabledMedia);
   settings.setValue("GuidanceAudioChannelEnabled",
-                    guidanceAudioChannelEnabled_);
-  settings.setValue("SystemAudioChannelEnabled", systemAudioChannelEnabled_);
+                    _audioChannelEnabledGuidance);
+  settings.setValue("SystemAudioChannelEnabled", _audioChannelEnabledSystem);
   settings.setValue("TelephonyAudioChannelEnabled",
-                    telephonyAudioChannelEnabled_);
+                    _audioChannelEnabledTelephony);
   settings.setValue("AudioOutputDeviceName",
                     QString::fromStdString(audioOutputDeviceName_));
   settings.setValue("AudioInputDeviceName",
@@ -319,8 +320,8 @@ void Configuration::save() {
   settings.endGroup();
 
   settings.beginGroup("Input");
-  settings.setValue("TouchscreenEnabled", touchscreenEnabled_);
-  settings.setValue("PlayerButtonControl", playerButtonControl_);
+  settings.setValue("TouchscreenEnabled", enableTouchscreen_);
+  settings.setValue("PlayerButtonControl", enablePlayerControl_);
   settings.beginWriteArray("Buttons");
   for (unsigned int i = 0; i < buttonCodes_.size(); ++i) {
     settings.setArrayIndex(i);
