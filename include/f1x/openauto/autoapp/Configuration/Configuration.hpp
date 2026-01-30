@@ -176,6 +176,7 @@ private:
   bool _audioChannelEnabledTelephony;
 
   std::string audioOutputDeviceName_;
+  std::string audioInputDeviceName_;
 
   static const std::string cConfigFileName;
 

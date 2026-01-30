@@ -26,8 +26,12 @@ source /opt/crankshaft/bin/log_functions.sh
 addremove=$1
 model=$2
 usbpath=$3
+addremove="$1"
+model="$2"
+usbpath="$3"
 
 if [ $addremove == "add" ] && [ "$usbpath" != "" ]; then
+if [ "$addremove" == "add" ] && [ -n "$usbpath" ]; then
     sleep 1
     echo $usbpath > /tmp/android_device
     echo $model >> /tmp/android_device
@@ -42,9 +46,11 @@ if [ $addremove == "add" ] && [ "$usbpath" != "" ]; then
 fi
 
 if [ "$addremove" == "remove" ] && [ "$usbpath" != "" ]; then
+if [ "$addremove" == "remove" ] && [ -n "$usbpath" ]; then
     if [ -f /tmp/android_device ]; then
         CHECK=$(cat /tmp/android_device | grep $usbpath)
         if [ ! -z $CHECK ]; then
+        if grep -Fq "$usbpath" /tmp/android_device; then
             sudo rm /tmp/android_device
             echo "" > /dev/tty3
             echo "[${RED}${BOLD} WARN ${RESET}] *******************************************************" > /dev/tty3
