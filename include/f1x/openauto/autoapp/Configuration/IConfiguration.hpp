@@ -130,6 +130,8 @@ public:
 
   virtual std::string getAudioOutputDeviceName() const = 0;
   virtual void setAudioOutputDeviceName(const std::string &value) = 0;
+  virtual std::string getAudioInputDeviceName() const = 0;
+  virtual void setAudioInputDeviceName(const std::string &value) = 0;
 };
 
 } // namespace configuration

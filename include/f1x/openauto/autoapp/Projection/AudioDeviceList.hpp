@@ -22,7 +22,6 @@
 #include <string>
 #include <vector>
 
-
 namespace f1x {
 namespace openauto {
 namespace autoapp {
@@ -36,10 +35,11 @@ struct AudioDeviceInfo {
   std::string name;
   bool isDefault;
   uint32_t outputChannels;
+  uint32_t inputChannels;
 };
 
 /**
- * Utility class to enumerate audio output devices using RTAudio
+ * Utility class to enumerate audio output/input devices using RTAudio
  */
 class AudioDeviceList {
 public:
@@ -50,17 +50,36 @@ public:
   static std::vector<AudioDeviceInfo> getOutputDevices();
 
   /**
-   * Find a device ID by its name
-   * @param name The device name to search for
-   * @return The device ID, or getDefaultDeviceId() if not found
+   * Get a list of all available audio input devices
+   * @return Vector of AudioDeviceInfo structs
    */
-  static uint32_t findDeviceByName(const std::string &name);
+  static std::vector<AudioDeviceInfo> getInputDevices();
+
+  /**
+   * Find an output device ID by its name
+   * @param name The device name to search for
+   * @return The device ID, or getDefaultOutputDeviceId() if not found
+   */
+  static uint32_t findOutputDeviceByName(const std::string &name);
+
+  /**
+   * Find an input device ID by its name
+   * @param name The device name to search for
+   * @return The device ID, or getDefaultInputDeviceId() if not found
+   */
+  static uint32_t findInputDeviceByName(const std::string &name);
 
   /**
    * Get the default output device ID
    * @return The default device ID
    */
-  static uint32_t getDefaultDeviceId();
+  static uint32_t getDefaultOutputDeviceId();
+
+  /**
+   * Get the default input device ID
+   * @return The default device ID
+   */
+  static uint32_t getDefaultInputDeviceId();
 };
 
 } // namespace projection

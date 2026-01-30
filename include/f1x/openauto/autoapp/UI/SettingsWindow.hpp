@@ -79,7 +79,7 @@ private slots:
   void on_pushButtonNetwork1_clicked();
   void updateSystemInfo();
   void updateInfo();
-  void onRefreshAudioDevices();
+  void onRefreshAudioInputDevices();
 
 public slots:
   void show_tab1();
@@ -113,6 +113,7 @@ private:
 #endif
   void populateBluetoothComboBox(QComboBox *comboBoxBluetooth);
   void populateAudioDeviceComboBox();
+  void populateAudioInputDeviceComboBox();
   Ui::SettingsWindow *ui_;
   configuration::IConfiguration::Pointer configuration_;
 

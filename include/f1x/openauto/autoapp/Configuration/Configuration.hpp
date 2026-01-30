@@ -127,6 +127,8 @@ public:
 
   std::string getAudioOutputDeviceName() const override;
   void setAudioOutputDeviceName(const std::string &value) override;
+  std::string getAudioInputDeviceName() const override;
+  void setAudioInputDeviceName(const std::string &value) override;
 
 private:
   void readButtonCodes(boost::property_tree::ptree &iniConfig);

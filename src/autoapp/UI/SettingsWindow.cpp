@@ -131,9 +131,12 @@ SettingsWindow::SettingsWindow(
           [&]() { system("/usr/local/bin/crankshaft samba stop &"); });
   connect(ui_->pushButtonRefreshAudioDevices, &QPushButton::clicked, this,
           &SettingsWindow::onRefreshAudioDevices);
+  connect(ui_->pushButtonRefreshAudioInputDevices, &QPushButton::clicked, this,
+          &SettingsWindow::onRefreshAudioInputDevices);
 
   // Initialize audio device list
   populateAudioDeviceComboBox();
+  populateAudioInputDeviceComboBox();
 
   // menu
   ui_->tab1->show();
@@ -441,6 +444,12 @@ void SettingsWindow::onSave() {
   QString selectedDeviceName =
       ui_->comboBoxAudioOutputDevice->currentData().toString();
   configuration_->setAudioOutputDeviceName(selectedDeviceName.toStdString());
+
+  // Save selected audio input device
+  QString selectedInputDeviceName =
+      ui_->comboBoxAudioInputDevice->currentData().toString();
+  configuration_->setAudioInputDeviceName(
+      selectedInputDeviceName.toStdString());
 
   configuration_->save();
 
@@ -775,6 +784,25 @@ void SettingsWindow::load() {
     }
   } else {
     ui_->labelStorage->setText("Storage is not ready or missing!");
+  }
+
+  // Restore audio output device selection
+  populateAudioDeviceComboBox(); // Ensure list is fresh
+  QString savedAudioDevice =
+      QString::fromStdString(configuration_->getAudioOutputDeviceName());
+  int index = ui_->comboBoxAudioOutputDevice->findData(savedAudioDevice);
+  if (index >= 0) {
+    ui_->comboBoxAudioOutputDevice->setCurrentIndex(index);
+  }
+
+  // Restore audio input device selection
+  populateAudioInputDeviceComboBox(); // Ensure list is fresh
+  QString savedAudioInputDevice =
+      QString::fromStdString(configuration_->getAudioInputDeviceName());
+  int inputIndex =
+      ui_->comboBoxAudioInputDevice->findData(savedAudioInputDevice);
+  if (inputIndex >= 0) {
+    ui_->comboBoxAudioInputDevice->setCurrentIndex(inputIndex);
   }
 }
 
@@ -1856,20 +1884,15 @@ void f1x::openauto::autoapp::ui::SettingsWindow::keyPressEvent(
 
 void f1x::openauto::autoapp::ui::SettingsWindow::populateAudioDeviceComboBox() {
   ui_->comboBoxAudioOutputDevice->clear();
+  ui_->comboBoxAudioOutputDevice->addItem("Default", "");
 
-  // Add default device option
-  ui_->comboBoxAudioOutputDevice->addItem("(Default Device)", QVariant(""));
-
-  // Get list of available audio devices
-  auto devices = projection::AudioDeviceList::getOutputDevices();
+  projection::AudioDeviceList deviceList;
+  auto devices = deviceList.getOutputDevices();
 
   for (const auto &device : devices) {
-    QString displayName = QString::fromStdString(device.name);
-    if (device.isDefault) {
-      displayName += " (Default)";
-    }
     ui_->comboBoxAudioOutputDevice->addItem(
-        displayName, QVariant(QString::fromStdString(device.name)));
+        QString::fromStdString(device.name),
+        QString::fromStdString(device.name));
   }
 
   // Select currently configured device

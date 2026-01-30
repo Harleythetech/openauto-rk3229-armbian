@@ -36,6 +36,21 @@
 
 #include <f1x/openauto/autoapp/Projection/OMXVideoOutput.hpp>
 #include <f1x/openauto/autoapp/Projection/QtVideoOutput.hpp>
+#include <f1x/openauto/autoapp/Projection/RtAudioInput.hpp>
+
+// ... (skipping context)
+
+void ServiceFactory::createMediaSourceServices(
+    f1x::openauto::autoapp::service::ServiceList &serviceList,
+    aasdk::messenger::IMessenger::Pointer messenger) {
+  OPENAUTO_LOG(info) << "[ServiceFactory] createMediaSourceServices()";
+  auto audioInput =
+      std::make_shared<projection::RtAudioInput>(1, 16, 16000, configuration_);
+
+  serviceList.emplace_back(
+      std::make_shared<mediasource::MicrophoneMediaSourceService>(
+          ioService_, messenger, std::move(audioInput)));
+}
 #include <f1x/openauto/autoapp/Service/Bluetooth/BluetoothService.hpp>
 #include <f1x/openauto/autoapp/Service/InputSource/InputSourceService.hpp>
 #include <f1x/openauto/autoapp/Service/Sensor/SensorService.hpp>
