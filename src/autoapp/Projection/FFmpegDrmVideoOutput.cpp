@@ -355,6 +355,12 @@ namespace f1x
                     codecCtx_->thread_type = 0;                  // Disable threading
                     codecCtx_->flags |= AV_CODEC_FLAG_LOW_DELAY; // Low delay mode
                     codecCtx_->flags2 |= AV_CODEC_FLAG2_FAST;    // Fast decoding
+                    
+                    // CRITICAL: Error resilience for VPU driver negotiation
+                    // The RK3229 v4l2_request driver may fail initial buffer allocation (ENOBUFS)
+                    // These flags prevent FFmpeg from crashing during the negotiation phase
+                    codecCtx_->error_concealment = FF_EC_GUESS_MVS | FF_EC_DEBLOCK;
+                    codecCtx_->err_recognition = AV_EF_IGNORE_ERR;
 
                     // Set get_format callback for hardware format negotiation
                     // This is called by FFmpeg to select pixel format - we prefer DRM_PRIME
@@ -404,6 +410,11 @@ namespace f1x
                     // Set options for low latency
                     AVDictionary *opts = nullptr;
                     av_dict_set(&opts, "refcounted_frames", "1", 0);
+                    
+                    // CRITICAL: Disable threading during VPU driver negotiation phase
+                    // The RK3229 v4l2_request driver can crash during multi-threaded init
+                    // We'll enable threading after first successful frame decode
+                    av_dict_set(&opts, "threads", "1", 0);
 
                     int ret = avcodec_open2(codecCtx_, codec_, &opts);
                     av_dict_free(&opts);
@@ -415,6 +426,9 @@ namespace f1x
                         OPENAUTO_LOG(error) << "[FFmpegDrmVideoOutput] Failed to open codec: " << errBuf;
                         return false;
                     }
+                    
+                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Codec opened successfully (single-threaded for init)";
+
 
                     // Create H.264 parser for NAL unit framing
                     parser_ = av_parser_init(AV_CODEC_ID_H264);
