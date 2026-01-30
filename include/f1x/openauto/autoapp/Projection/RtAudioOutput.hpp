@@ -19,50 +19,60 @@
 #pragma once
 
 #if __has_include(<rtaudio/RtAudio.h>)
-#  include <rtaudio/RtAudio.h>
+#include <rtaudio/RtAudio.h>
 #elif __has_include(<RtAudio.h>)
-#  include <RtAudio.h>
+#include <RtAudio.h>
 #endif
 
+#include <atomic>
 #include <f1x/openauto/autoapp/Projection/IAudioOutput.hpp>
 #include <f1x/openauto/autoapp/Projection/SequentialBuffer.hpp>
 
-namespace f1x
-{
-namespace openauto
-{
-namespace autoapp
-{
-namespace projection
-{
+namespace f1x {
+namespace openauto {
+namespace autoapp {
+namespace projection {
 
-class RtAudioOutput: public IAudioOutput
-{
+class RtAudioOutput : public IAudioOutput {
 public:
-    RtAudioOutput(uint32_t channelCount, uint32_t sampleSize, uint32_t sampleRate);
-    bool open() override;
-    void write(aasdk::messenger::Timestamp::ValueType timestamp, const aasdk::common::DataConstBuffer& buffer) override;
-    void start() override;
-    void stop() override;
-    void suspend() override;
-    uint32_t getSampleSize() const override;
-    uint32_t getChannelCount() const override;
-    uint32_t getSampleRate() const override;
+  /**
+   * @brief Construct RtAudioOutput
+   * @param channelCount Number of audio channels
+   * @param sampleSize Sample size in bits
+   * @param sampleRate Sample rate in Hz
+   * @param deviceId Device ID to use (0 = use default device)
+   */
+  RtAudioOutput(uint32_t channelCount, uint32_t sampleSize, uint32_t sampleRate,
+                uint32_t deviceId = 0);
+  bool open() override;
+  void write(aasdk::messenger::Timestamp::ValueType timestamp,
+             const aasdk::common::DataConstBuffer &buffer) override;
+  void start() override;
+  void stop() override;
+  void suspend() override;
+  uint32_t getSampleSize() const override;
+  uint32_t getChannelCount() const override;
+  uint32_t getSampleRate() const override;
 
 private:
-    void doSuspend();
-    static int audioBufferReadHandler(void* outputBuffer, void* inputBuffer, unsigned int nBufferFrames,
-                                      double streamTime, RtAudioStreamStatus status, void* userData);
+  void doSuspend();
+  static int audioBufferReadHandler(void *outputBuffer, void *inputBuffer,
+                                    unsigned int nBufferFrames,
+                                    double streamTime,
+                                    RtAudioStreamStatus status, void *userData);
 
-    uint32_t channelCount_;
-    uint32_t sampleSize_;
-    uint32_t sampleRate_;
-    SequentialBuffer audioBuffer_;
-    std::unique_ptr<RtAudio> dac_;
-    std::mutex mutex_;
+  uint32_t channelCount_;
+  uint32_t sampleSize_;
+  uint32_t sampleRate_;
+  uint32_t deviceId_;
+  SequentialBuffer audioBuffer_;
+  std::unique_ptr<RtAudio> dac_;
+  std::mutex mutex_;
+  std::atomic<bool> isStopping_{
+      false}; // Atomic flag for safe shutdown during USB disconnect
 };
 
-}
-}
-}
-}
+} // namespace projection
+} // namespace autoapp
+} // namespace openauto
+} // namespace f1x

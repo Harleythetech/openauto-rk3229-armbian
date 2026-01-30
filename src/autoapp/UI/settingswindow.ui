@@ -1746,54 +1746,79 @@ QSlider::groove:horizontal { background: #6d6d6d; height: 32px;}</string>
            </layout>
           </widget>
          </item>
+
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="groupBoxAudioOutputDevice">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Expanding" vsizetype="Minimum">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="title">
+         <string>Audio Output Device (ALSA)</string>
+        </property>
+        <layout class="QHBoxLayout" name="horizontalLayoutAudioDevice">
+         <property name="topMargin">
+          <number>4</number>
+         </property>
+         <property name="bottomMargin">
+          <number>4</number>
+         </property>
          <item>
-          <widget class="QGroupBox" name="groupBoxAudioOutputBackend">
+          <widget class="QComboBox" name="comboBoxAudioOutputDevice">
            <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
              <horstretch>0</horstretch>
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
            <property name="minimumSize">
             <size>
-             <width>180</width>
-             <height>0</height>
+             <width>0</width>
+             <height>28</height>
             </size>
            </property>
            <property name="maximumSize">
             <size>
-             <width>180</width>
-             <height>16777215</height>
+             <width>16777215</width>
+             <height>28</height>
             </size>
            </property>
-           <property name="title">
-            <string>Output backend</string>
+           <property name="toolTip">
+            <string>Select the audio output device for Android Auto</string>
            </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_31">
-            <property name="topMargin">
-             <number>2</number>
-            </property>
-            <property name="bottomMargin">
-             <number>0</number>
-            </property>
-            <item>
-             <widget class="QRadioButton" name="radioButtonRtAudio">
-              <property name="text">
-               <string>RT audio</string>
-              </property>
-              <property name="checked">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QRadioButton" name="radioButtonQtAudio">
-              <property name="text">
-               <string>Qt</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="pushButtonRefreshAudioDevices">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>100</width>
+             <height>28</height>
+            </size>
+           </property>
+           <property name="maximumSize">
+            <size>
+             <width>100</width>
+             <height>28</height>
+            </size>
+           </property>
+           <property name="text">
+            <string>Refresh</string>
+           </property>
+           <property name="toolTip">
+            <string>Refresh the list of available audio devices</string>
+           </property>
           </widget>
          </item>
         </layout>

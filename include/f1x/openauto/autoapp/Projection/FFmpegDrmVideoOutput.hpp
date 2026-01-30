@@ -54,244 +54,245 @@
 
 #ifdef USE_FFMPEG_DRM
 
-extern "C"
-{
+extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/hwcontext.h>
 #include <libavutil/hwcontext_drm.h>
-#include <libavutil/pixdesc.h>
-#include <libavutil/opt.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/opt.h>
+#include <libavutil/pixdesc.h>
 #include <libswscale/swscale.h>
+
 }
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-#include <mutex>
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
+#include <f1x/openauto/autoapp/Projection/VideoOutput.hpp>
+#include <mutex>
+#include <queue>
 #include <string>
 #include <thread>
-#include <queue>
-#include <condition_variable>
-#include <f1x/openauto/autoapp/Projection/VideoOutput.hpp>
 
-namespace f1x
-{
-    namespace openauto
-    {
-        namespace autoapp
-        {
-            namespace projection
-            {
 
-                /**
-                 * @class FFmpegDrmVideoOutput
-                 * @brief Ultra-low latency video output using FFmpeg DRM hwaccel + DRM Prime.
-                 *
-                 * This class provides the lowest possible latency video decoding and display
-                 * for embedded Linux systems using FFmpeg's DRM hardware acceleration framework.
-                 *
-                 * Features:
-                 * - Hardware accelerated H.264 decoding via DRM hwaccel (rkvdec on RK3229)
-                 * - Zero-copy DRM Prime path to KMS display
-                 * - Minimal internal buffering (decode-on-demand)
-                 * - DRM hardware cursor support
-                 * - Thread-safe frame submission
-                 */
-                class FFmpegDrmVideoOutput : public VideoOutput
-                {
-                public:
-                    /**
-                     * @brief Constructs the FFmpegDrmVideoOutput with the given configuration.
-                     * @param configuration Pointer to the OpenAuto configuration interface.
-                     */
-                    explicit FFmpegDrmVideoOutput(configuration::IConfiguration::Pointer configuration);
+namespace f1x {
+namespace openauto {
+namespace autoapp {
+namespace projection {
 
-                    /**
-                     * @brief Destructor - ensures proper cleanup of FFmpeg and DRM resources.
-                     */
-                    ~FFmpegDrmVideoOutput() override;
+/**
+ * @class FFmpegDrmVideoOutput
+ * @brief Ultra-low latency video output using FFmpeg DRM hwaccel + DRM Prime.
+ *
+ * This class provides the lowest possible latency video decoding and display
+ * for embedded Linux systems using FFmpeg's DRM hardware acceleration
+ * framework.
+ *
+ * Features:
+ * - Hardware accelerated H.264 decoding via DRM hwaccel (rkvdec on RK3229)
+ * - Zero-copy DRM Prime path to KMS display
+ * - Minimal internal buffering (decode-on-demand)
+ * - DRM hardware cursor support
+ * - Thread-safe frame submission
+ */
+class FFmpegDrmVideoOutput : public VideoOutput {
+public:
+  /**
+   * @brief Constructs the FFmpegDrmVideoOutput with the given configuration.
+   * @param configuration Pointer to the OpenAuto configuration interface.
+   */
+  explicit FFmpegDrmVideoOutput(
+      configuration::IConfiguration::Pointer configuration);
 
-                    // Prevent copying
-                    FFmpegDrmVideoOutput(const FFmpegDrmVideoOutput &) = delete;
-                    FFmpegDrmVideoOutput &operator=(const FFmpegDrmVideoOutput &) = delete;
+  /**
+   * @brief Destructor - ensures proper cleanup of FFmpeg and DRM resources.
+   */
+  ~FFmpegDrmVideoOutput() override;
 
-                    /**
-                     * @brief Initializes FFmpeg decoder and DRM display.
-                     * @return true if initialization succeeded, false otherwise.
-                     */
-                    bool open() override;
+  // Prevent copying
+  FFmpegDrmVideoOutput(const FFmpegDrmVideoOutput &) = delete;
+  FFmpegDrmVideoOutput &operator=(const FFmpegDrmVideoOutput &) = delete;
 
-                    /**
-                     * @brief Starts the video output pipeline.
-                     * @return true if pipeline started successfully, false otherwise.
-                     */
-                    bool init() override;
+  /**
+   * @brief Initializes FFmpeg decoder and DRM display.
+   * @return true if initialization succeeded, false otherwise.
+   */
+  bool open() override;
 
-                    /**
-                     * @brief Writes an H.264 video frame for decoding and display.
-                     * @param timestamp The presentation timestamp in nanoseconds.
-                     * @param buffer The raw H.264 frame data to be decoded and displayed.
-                     */
-                    void write(uint64_t timestamp, const aasdk::common::DataConstBuffer &buffer) override;
+  /**
+   * @brief Starts the video output pipeline.
+   * @return true if pipeline started successfully, false otherwise.
+   */
+  bool init() override;
 
-                    /**
-                     * @brief Stops the pipeline and releases all resources.
-                     */
-                    void stop() override;
+  /**
+   * @brief Writes an H.264 video frame for decoding and display.
+   * @param timestamp The presentation timestamp in nanoseconds.
+   * @param buffer The raw H.264 frame data to be decoded and displayed.
+   */
+  void write(uint64_t timestamp,
+             const aasdk::common::DataConstBuffer &buffer) override;
 
-                    /**
-                     * @brief Updates the hardware cursor position.
-                     * @param x X coordinate in screen pixels.
-                     * @param y Y coordinate in screen pixels.
-                     */
-                    static void updateCursorPosition(int x, int y);
+  /**
+   * @brief Stops the pipeline and releases all resources.
+   */
+  void stop() override;
 
-                    /**
-                     * @brief Shows or hides the hardware cursor.
-                     * @param visible true to show cursor, false to hide.
-                     */
-                    static void setCursorVisible(bool visible);
+  /**
+   * @brief Updates the hardware cursor position.
+   * @param x X coordinate in screen pixels.
+   * @param y Y coordinate in screen pixels.
+   */
+  static void updateCursorPosition(int x, int y);
 
-                    /**
-                     * @brief Emergency cleanup for signal handlers.
-                     * Called on SIGINT/SIGTERM to release DRM resources and prevent CMA leaks.
-                     * This method is safe to call from a signal handler context.
-                     */
-                    void emergencyCleanup();
+  /**
+   * @brief Shows or hides the hardware cursor.
+   * @param visible true to show cursor, false to hide.
+   */
+  static void setCursorVisible(bool visible);
 
-                private:
-                    /**
-                     * @brief Initializes the FFmpeg decoder with DRM hwaccel.
-                     * @return true if decoder initialized successfully.
-                     */
-                    bool initDecoder();
+  /**
+   * @brief Emergency cleanup for signal handlers.
+   * Called on SIGINT/SIGTERM to release DRM resources and prevent CMA leaks.
+   * This method is safe to call from a signal handler context.
+   */
+  void emergencyCleanup();
 
-                    /**
-                     * @brief Initializes the DRM display for direct output.
-                     * @return true if DRM initialized successfully.
-                     */
-                    bool initDrmDisplay();
+private:
+  /**
+   * @brief Initializes the FFmpeg decoder with DRM hwaccel.
+   * @return true if decoder initialized successfully.
+   */
+  bool initDecoder();
 
-                    /**
-                     * @brief Displays a decoded frame via DRM.
-                     * @param frame The decoded AVFrame with DRM Prime data.
-                     * @return true if frame displayed successfully.
-                     */
-                    bool displayFrame(AVFrame *frame);
+  /**
+   * @brief Initializes the DRM display for direct output.
+   * @return true if DRM initialized successfully.
+   */
+  bool initDrmDisplay();
 
-                    /**
-                     * @brief Cleans up FFmpeg resources.
-                     */
-                    void cleanupDecoder();
+  /**
+   * @brief Displays a decoded frame via DRM.
+   * @param frame The decoded AVFrame with DRM Prime data.
+   * @return true if frame displayed successfully.
+   */
+  bool displayFrame(AVFrame *frame);
 
-                    /**
-                     * @brief Cleans up DRM resources.
-                     */
-                    void cleanupDrm();
+  /**
+   * @brief Cleans up FFmpeg resources.
+   */
+  void cleanupDecoder();
 
-                    /**
-                     * @brief Sets up BT.709 color encoding on the DRM plane.
-                     * Prevents the 'purple tint' issue common with Rockchip VOP.
-                     */
-                    void setupColorEncoding();
+  /**
+   * @brief Cleans up DRM resources.
+   */
+  void cleanupDrm();
 
-                    /**
-                     * @brief Gets video width based on configured resolution.
-                     * @return Video width in pixels.
-                     */
-                    int getVideoWidth() const;
+  /**
+   * @brief Sets up BT.709 color encoding on the DRM plane.
+   * Prevents the 'purple tint' issue common with Rockchip VOP.
+   */
+  void setupColorEncoding();
 
-                    /**
-                     * @brief Gets video height based on configured resolution.
-                     * @return Video height in pixels.
-                     */
-                    int getVideoHeight() const;
+  /**
+   * @brief Gets video width based on configured resolution.
+   * @return Video width in pixels.
+   */
+  int getVideoWidth() const;
 
-                    /**
-                     * @brief Initializes the DRM hardware cursor.
-                     * @return true if cursor initialized successfully.
-                     */
-                    bool initCursor();
+  /**
+   * @brief Gets video height based on configured resolution.
+   * @return Video height in pixels.
+   */
+  int getVideoHeight() const;
 
-                    /**
-                     * @brief Cleans up cursor resources.
-                     */
-                    void cleanupCursor();
+  /**
+   * @brief Initializes the DRM hardware cursor.
+   * @return true if cursor initialized successfully.
+   */
+  bool initCursor();
 
-                    /**
-                     * @brief Waits for VSync/page flip completion.
-                     * Ensures the previous frame is no longer in use before releasing its buffer.
-                     */
-                    void waitForPageFlip();
+  /**
+   * @brief Cleans up cursor resources.
+   */
+  void cleanupCursor();
 
-                    /**
-                     * @brief Converts software-decoded frame to displayable format.
-                     * @param frame Source frame (YUV420P or similar)
-                     * @return true if conversion and display succeeded
-                     */
-                    bool displaySoftwareFrame(AVFrame *frame);
+  /**
+   * @brief Waits for VSync/page flip completion.
+   * Ensures the previous frame is no longer in use before releasing its buffer.
+   */
+  void waitForPageFlip();
 
-                    // Thread synchronization
-                    std::mutex mutex_;
+  /**
+   * @brief Converts software-decoded frame to displayable format.
+   * @param frame Source frame (YUV420P or similar)
+   * @return true if conversion and display succeeded
+   */
+  bool displaySoftwareFrame(AVFrame *frame);
 
-                    // Pipeline state
-                    std::atomic<bool> isActive_;
-                    uint64_t frameCount_;
-                    uint64_t droppedFrames_; // Track frames dropped due to decoder lag
+  // Thread synchronization
+  std::mutex mutex_;
 
-                    // FFmpeg decoder state
-                    const AVCodec *codec_;
-                    AVCodecContext *codecCtx_;
-                    AVCodecParserContext *parser_;
-                    AVPacket *packet_;
-                    AVFrame *frame_;
-                    AVBufferRef *hwDeviceCtx_;
+  // Pipeline state
+  std::atomic<bool> isActive_;
+  uint64_t frameCount_;
+  uint64_t droppedFrames_; // Track frames dropped due to decoder lag
 
-                    // Buffer pooling: Keep reference to displayed frames until DRM is done
-                    // This prevents freeing DRM Prime buffers while still in use by display
-                    AVFrame *displayedFrame_;         // Currently being displayed
-                    AVFrame *previousDisplayedFrame_; // Previous frame (being released)
+  // FFmpeg decoder state
+  const AVCodec *codec_;
+  AVCodecContext *codecCtx_;
+  AVCodecParserContext *parser_;
+  AVPacket *packet_;
+  AVFrame *frame_;
+  AVBufferRef *hwDeviceCtx_;
 
-                    // Software fallback state
-                    struct SwsContext *swsCtx_; // For YUV->RGB conversion if needed
-                    uint32_t swDumbHandle_;     // Dumb buffer handle for SW frames
-                    uint32_t swDumbFbId_;       // Framebuffer ID for SW frames
-                    void *swDumbMap_;           // Mapped memory for SW frames
-                    size_t swDumbSize_;         // Size of mapped memory
-                    uint32_t swDumbPitch_;      // Stride of dumb buffer (64-byte aligned)
+  // Buffer pooling: Keep reference to displayed frames until DRM is done
+  // This prevents freeing DRM Prime buffers while still in use by display
+  AVFrame *displayedFrame_;         // Currently being displayed
+  AVFrame *previousDisplayedFrame_; // Previous frame (being released)
 
-                    // DRM display state
-                    int drmFd_;
-                    uint32_t connectorId_;
-                    uint32_t crtcId_;
-                    uint32_t planeId_;
-                    drmModeModeInfo mode_;
-                    bool drmInitialized_;
-                    bool usingHwAccel_; // Track if HW accel is working
+  // Software fallback state
+  struct SwsContext *swsCtx_; // For YUV->RGB conversion if needed
+  uint32_t swDumbHandle_;     // Dumb buffer handle for SW frames
+  uint32_t swDumbFbId_;       // Framebuffer ID for SW frames
+  void *swDumbMap_;           // Mapped memory for SW frames
+  size_t swDumbSize_;         // Size of mapped memory
+  uint32_t swDumbPitch_;      // Stride of dumb buffer (64-byte aligned)
 
-                    // Frame buffer tracking for page flipping
-                    uint32_t currentFbId_;
-                    uint32_t previousFbId_;
-                    uint32_t currentHandle_;  // GEM handle for cleanup
-                    uint32_t previousHandle_; // Previous GEM handle
+  // DRM display state
+  int drmFd_;
+  uint32_t connectorId_;
+  uint32_t crtcId_;
+  uint32_t planeId_;
+  drmModeModeInfo mode_;
+  bool drmInitialized_;
+  bool usingHwAccel_; // Track if HW accel is working
 
-                    // DRM cursor state (static for access from InputDevice)
-                    static int cursorDrmFd_;
-                    static uint32_t cursorCrtcId_;
-                    static uint32_t cursorBufferHandle_;
-                    static uint32_t cursorFbId_;
-                    static bool cursorInitialized_;
-                    static bool cursorVisible_;
-                    static std::mutex cursorMutex_;
-                };
+  // Frame buffer tracking for page flipping
+  uint32_t currentFbId_;
+  uint32_t previousFbId_;
+  uint32_t currentHandle_;  // GEM handle for cleanup
+  uint32_t previousHandle_; // Previous GEM handle
 
-            } // namespace projection
-        } // namespace autoapp
-    } // namespace openauto
+  // DRM cursor state (static for access from InputDevice)
+  static int cursorDrmFd_;
+  static uint32_t cursorCrtcId_;
+  static uint32_t cursorBufferHandle_;
+  static uint32_t cursorFbId_;
+  static bool cursorInitialized_;
+  static bool cursorVisible_;
+  static bool cursorEnabled_; // Set from configuration - controls if DRM cursor
+                              // is active
+  static std::mutex cursorMutex_;
+};
+
+} // namespace projection
+} // namespace autoapp
+} // namespace openauto
 } // namespace f1x
 
 #endif // USE_FFMPEG_DRM
