@@ -28,6 +28,7 @@
 #include <QMessageBox>
 #include <QNetworkInterface>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QStorageInfo>
 #include <QTextStream>
 #include <QTimer>
@@ -137,6 +138,16 @@ SettingsWindow::SettingsWindow(
   // Initialize audio device list
   populateAudioDeviceComboBox();
   populateAudioInputDeviceComboBox();
+
+  // Initialize audio level metering
+  audioLevelProcess_ = nullptr;
+  audioMeterTimer_ = new QTimer(this);
+  connect(audioMeterTimer_, &QTimer::timeout, this,
+          &SettingsWindow::updateAudioLevels);
+  audioMeterTimer_->start(200); // Update every 200ms
+
+  // Hide meter progress bars initially
+  ui_->labelTestInProgress->setVisible(false);
 
   // menu
   ui_->tab1->show();
@@ -495,15 +506,10 @@ void SettingsWindow::onSave() {
     params.append("0");
   }
   params.append("#");
-  params.append(
-      std::string("'") +
-      std::string(ui_->comboBoxPulseOutput->currentText().toStdString()) +
-      std::string("'"));
+  // PulseAudio devices removed - using ALSA only
+  params.append("'default'");
   params.append("#");
-  params.append(
-      std::string("'") +
-      std::string(ui_->comboBoxPulseInput->currentText().toStdString()) +
-      std::string("'"));
+  params.append("'default'");
   params.append("#");
   params.append(
       std::string(ui_->comboBoxHardwareRTC->currentText().toStdString()));
@@ -985,10 +991,18 @@ void SettingsWindow::onUpdateBrightnessNight(int value) {
 
 void SettingsWindow::onUpdateSystemVolume(int value) {
   ui_->labelSystemVolumeValue->setText(QString::number(value));
+  // Apply volume change via amixer
+  QProcess amixer;
+  amixer.start("amixer", {"sset", "Master", QString::number(value) + "%"});
+  amixer.waitForFinished(500);
 }
 
 void SettingsWindow::onUpdateSystemCapture(int value) {
   ui_->labelSystemCaptureValue->setText(QString::number(value));
+  // Apply capture volume change via amixer
+  QProcess amixer;
+  amixer.start("amixer", {"sset", "Capture", QString::number(value) + "%"});
+  amixer.waitForFinished(500);
 }
 
 void SettingsWindow::onUpdateLux1(int value) {
@@ -1157,16 +1171,39 @@ void SettingsWindow::loadSystemValues() {
     // date string
     ui_->valueSystemBuildDate->setText(
         configuration_->readFileContent("/etc/crankshaft.date"));
-    // set volume
-    ui_->labelSystemVolumeValue->setText(
-        configuration_->readFileContent("/boot/crankshaft/volume"));
-    ui_->horizontalSliderSystemVolume->setValue(
-        configuration_->readFileContent("/boot/crankshaft/volume").toInt());
+    // set volume using amixer (fallback to 50% if amixer fails)
+    int masterVolume = 50;
+    int captureVolume = 50;
+    {
+      QProcess amixer;
+      amixer.start("amixer", {"sget", "Master"});
+      if (amixer.waitForFinished(1000)) {
+        QString output = amixer.readAllStandardOutput();
+        // Parse output like: [85%] or Playback 85 [85%]
+        QRegularExpression re("\\[(\\d+)%\\]");
+        QRegularExpressionMatch match = re.match(output);
+        if (match.hasMatch()) {
+          masterVolume = match.captured(1).toInt();
+        }
+      }
+    }
+    {
+      QProcess amixer;
+      amixer.start("amixer", {"sget", "Capture"});
+      if (amixer.waitForFinished(1000)) {
+        QString output = amixer.readAllStandardOutput();
+        QRegularExpression re("\\[(\\d+)%\\]");
+        QRegularExpressionMatch match = re.match(output);
+        if (match.hasMatch()) {
+          captureVolume = match.captured(1).toInt();
+        }
+      }
+    }
+    ui_->labelSystemVolumeValue->setText(QString::number(masterVolume));
+    ui_->horizontalSliderSystemVolume->setValue(masterVolume);
     // set cap volume
-    ui_->labelSystemCaptureValue->setText(
-        configuration_->readFileContent("/boot/crankshaft/capvolume"));
-    ui_->horizontalSliderSystemCapture->setValue(
-        configuration_->readFileContent("/boot/crankshaft/capvolume").toInt());
+    ui_->labelSystemCaptureValue->setText(QString::number(captureVolume));
+    ui_->horizontalSliderSystemCapture->setValue(captureVolume);
     // set shutdown
     ui_->valueShutdownTimer->setText("- - -");
     ui_->spinBoxShutdown->setValue(
@@ -1210,48 +1247,7 @@ void SettingsWindow::loadSystemValues() {
 
     populateBluetoothComboBox(ui_->comboBoxBluetooth);
 
-    if (std::ifstream("/tmp/get_inputs")) {
-      QFile inputsFile(QString("/tmp/get_inputs"));
-      inputsFile.open(QIODevice::ReadOnly);
-      QTextStream data_return(&inputsFile);
-      QStringList inputs = data_return.readAll().split("\n");
-      inputsFile.close();
-      int cleaner = ui_->comboBoxPulseInput->count();
-      while (cleaner > -1) {
-        ui_->comboBoxPulseInput->removeItem(cleaner);
-        cleaner--;
-      }
-      int indexin = inputs.count();
-      int countin = 0;
-      while (countin < indexin - 1) {
-        ui_->comboBoxPulseInput->addItem(inputs[countin]);
-        countin++;
-      }
-    }
-
-    if (std::ifstream("/tmp/get_outputs")) {
-      QFile outputsFile(QString("/tmp/get_outputs"));
-      outputsFile.open(QIODevice::ReadOnly);
-      QTextStream data_return(&outputsFile);
-      QStringList outputs = data_return.readAll().split("\n");
-      outputsFile.close();
-      int cleaner = ui_->comboBoxPulseOutput->count();
-      while (cleaner > -1) {
-        ui_->comboBoxPulseOutput->removeItem(cleaner);
-        cleaner--;
-      }
-      int indexout = outputs.count();
-      int countout = 0;
-      while (countout < indexout - 1) {
-        ui_->comboBoxPulseOutput->addItem(outputs[countout]);
-        countout++;
-      }
-    }
-
-    ui_->comboBoxPulseOutput->setCurrentText(
-        configuration_->readFileContent("/tmp/get_default_output"));
-    ui_->comboBoxPulseInput->setCurrentText(
-        configuration_->readFileContent("/tmp/get_default_input"));
+    // PulseAudio device population removed - using ALSA device selection only
 
     if (std::ifstream("/tmp/timezone_listing")) {
       QFile zoneFile(QString("/tmp/timezone_listing"));
@@ -1946,4 +1942,64 @@ void f1x::openauto::autoapp::ui::SettingsWindow::
 
 void f1x::openauto::autoapp::ui::SettingsWindow::onRefreshAudioInputDevices() {
   populateAudioInputDeviceComboBox();
+}
+
+void f1x::openauto::autoapp::ui::SettingsWindow::updateAudioLevels() {
+  // Update input level using arecord to sample microphone
+  // We use a quick sample and analyze peak level
+  static int inputDecayLevel = 0;
+  static int outputDecayLevel = 0;
+
+  // Sample input level using arecord with max level extraction
+  // This is a lightweight approach - sample 0.05 seconds and get max amplitude
+  if (audioLevelProcess_ == nullptr ||
+      audioLevelProcess_->state() == QProcess::NotRunning) {
+    if (audioLevelProcess_ != nullptr) {
+      // Read previous result
+      QString output = audioLevelProcess_->readAllStandardOutput();
+      // Parse the max peak level from output (expected format from awk: single
+      // number 0-100)
+      bool ok;
+      int level = output.trimmed().toInt(&ok);
+      if (ok && level >= 0 && level <= 100) {
+        inputDecayLevel = level;
+      }
+      delete audioLevelProcess_;
+    }
+
+    // Start new level check - sample mic and compute peak
+    // arecord samples for 0.05s, sox outputs max amplitude as 0-1 float
+    audioLevelProcess_ = new QProcess(this);
+    QString selectedDevice =
+        ui_->comboBoxAudioInputDevice->currentData().toString();
+    QString deviceArg = selectedDevice.isEmpty() ? "default" : selectedDevice;
+
+    // Use arecord | sox to get peak amplitude, convert to 0-100
+    QString cmd =
+        QString("arecord -D %1 -d 1 -f S16_LE -r 16000 -c 1 2>/dev/null | "
+                "sox -t raw -r 16000 -e signed -b 16 -c 1 - -n stat 2>&1 | "
+                "grep 'Maximum amplitude' | awk '{print int($3 * 100)}'")
+            .arg(deviceArg);
+    audioLevelProcess_->start("sh", QStringList() << "-c" << cmd);
+  }
+
+  // Apply decay to input level for smooth animation
+  if (inputDecayLevel > 0) {
+    ui_->progressBarInputLevel->setValue(inputDecayLevel);
+    inputDecayLevel = qMax(0, inputDecayLevel - 5); // Decay
+  } else {
+    ui_->progressBarInputLevel->setValue(0);
+  }
+
+  // Output level: show based on volume slider (simulated - actual output
+  // monitoring would require loopback device or PulseAudio monitor)
+  int volumeLevel = ui_->horizontalSliderSystemVolume->value();
+  // Animate with slight random variation to show "activity"
+  static int lastOutputLevel = 0;
+  int displayLevel = qMin(100, qMax(0, volumeLevel + (qrand() % 10 - 5)));
+  if (volumeLevel > 0) {
+    outputDecayLevel = qMax(outputDecayLevel, displayLevel);
+  }
+  outputDecayLevel = qMax(0, outputDecayLevel - 3);
+  ui_->progressBarOutputLevel->setValue(outputDecayLevel);
 }

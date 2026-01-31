@@ -81,6 +81,7 @@ private slots:
   void updateInfo();
   void onRefreshAudioDevices();
   void onRefreshAudioInputDevices();
+  void updateAudioLevels();
 
 public slots:
   void show_tab1();
@@ -117,6 +118,8 @@ private:
   void populateAudioInputDeviceComboBox();
   Ui::SettingsWindow *ui_;
   configuration::IConfiguration::Pointer configuration_;
+  QTimer *audioMeterTimer_;
+  QProcess *audioLevelProcess_;
 
   void getMacMemoryInfo(QString &freeMemory);
 };
