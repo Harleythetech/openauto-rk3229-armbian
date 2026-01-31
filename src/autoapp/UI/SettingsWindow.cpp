@@ -1914,3 +1914,36 @@ void f1x::openauto::autoapp::ui::SettingsWindow::populateAudioDeviceComboBox() {
 void f1x::openauto::autoapp::ui::SettingsWindow::onRefreshAudioDevices() {
   populateAudioDeviceComboBox();
 }
+
+void f1x::openauto::autoapp::ui::SettingsWindow::
+    populateAudioInputDeviceComboBox() {
+  ui_->comboBoxAudioInputDevice->clear();
+  ui_->comboBoxAudioInputDevice->addItem("Default", "");
+
+  projection::AudioDeviceList deviceList;
+  auto devices = deviceList.getInputDevices();
+
+  for (const auto &device : devices) {
+    ui_->comboBoxAudioInputDevice->addItem(QString::fromStdString(device.name),
+                                           QString::fromStdString(device.name));
+  }
+
+  // Select currently configured device
+  std::string savedDeviceName = configuration_->getAudioInputDeviceName();
+  if (savedDeviceName.empty()) {
+    ui_->comboBoxAudioInputDevice->setCurrentIndex(0);
+  } else {
+    int index = ui_->comboBoxAudioInputDevice->findData(
+        QVariant(QString::fromStdString(savedDeviceName)));
+    if (index >= 0) {
+      ui_->comboBoxAudioInputDevice->setCurrentIndex(index);
+    } else {
+      // Device not found, select default
+      ui_->comboBoxAudioInputDevice->setCurrentIndex(0);
+    }
+  }
+}
+
+void f1x::openauto::autoapp::ui::SettingsWindow::onRefreshAudioInputDevices() {
+  populateAudioInputDeviceComboBox();
+}
