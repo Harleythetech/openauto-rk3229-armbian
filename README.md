@@ -8,10 +8,11 @@ OpenAuto is an AndroidAuto(tm) headunit emulator based on aasdk library and Qt l
 
 ### Features
 
-- **Hardware H.264 decoding** via V4L2 stateless decoder (rkvdec)
-- **KMS/DRM video output** - direct rendering without compositor overhead
-- **ALSA audio** - no PulseAudio dependency, lower latency (requires modification of /etc/asound.conf)
-- 480p, 720p 30 FPS (720p 60, 1080p 30/60 has too much latency)
+- **Custom FFmpeg Backend** - Uses Jock's experimental builds (v4l2request/v4l2drmprime) for hardware H.264 decoding on Rockchip/Allwinner SoCs.
+- **KMS/DRM video output** - direct rendering without compositor overhead.
+- **RtAudio Audio I/O** - Replaces PulseAudio/QtAudio for lower latency audio handling.
+- **LinuxFB Default** - Targeted for Linux Framebuffer by default for embedded performance.
+- 480p -> 1080p 60 FPS support
 - Audio playback from all audio channels (Media, System and Speech)
 - Touchscreen input
 - Bluetooth support
@@ -27,13 +28,18 @@ OpenAuto is an AndroidAuto(tm) headunit emulator based on aasdk library and Qt l
 
 ### Requirements
 
-- Armbian or similar Linux distribution
-- GStreamer 1.14+ with:
-  - `gstreamer1.0-plugins-bad` (for kmssink)
-  - V4L2 stateless decoder support
-- Qt5 with Multimedia widgets
-- ALSA (libasound2)
-- libdrm
+- **Hardware**: Rockchip RK3229/RK3328/RK3399 (or similar with stateless V4L2 decoder).
+- **RAM**: 1GB or more recommended.
+- **OS**: Armbian (Bookworm or Trixie).
+- **Kernel Config**: CMA (Contiguous Memory Allocator) **MUST** be set to **256MB** in `/boot/armbianEnv.txt`.
+- **System Dependencies**:
+  - FFmpeg (custom build with `v4l2request` & `v4l2drmprime` patches)
+  - Qt5 with Multimedia widgets
+  - ALSA (libasound2)
+  - libdrm
+  - **Abseil C++ Library**
+  - **Protobuf 30.x** (protoc compiler and libraries)
+  - **[aasdk](https://github.com/opencardev/aasdk)** (install before compiling OpenAuto)
 
 ### Getting Started
 
@@ -60,7 +66,26 @@ For detailed build instructions including dependencies and cross-compilation, se
 ```bash
 # Install dependencies and build
 ./build.sh release --auto-deps --package
+# Install dependencies and build
+./build.sh release --auto-deps --package
 ```
+
+#### Docker Build (QEMU armv7 Emulation)
+
+You can build the project for ARMv7 on an x86 machine using Docker with QEMU emulation.
+
+1.  **Install QEMU User Static**:
+    ```bash
+    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    ```
+
+2.  **Build using Docker**:
+    ```bash
+    # Build the Docker image (compiles OpenAuto)
+    docker build --platform linux/arm/v7 -t openauto .
+    ```
+
+    *Note: This ensures all dependencies (including Abseil, Protobuf 30.x, and AASDK) are correctly installed in the build environment.*
 
 #### Cross-Compilation
 
@@ -161,6 +186,12 @@ _AndroidAuto is registered trademark of Google Inc._
 
 - Original [OpenAuto](https://github.com/opencardev/openauto) by f1x.studio
 - [aasdk](https://github.com/opencardev/aasdk) library
+
+### Known Issues
+
+- **FFmpeg Backend Cursor**: The mouse cursor is currently not visible when using the FFmpeg video backend.
+- **Backend Selection**: Logic may default to Qt video output if FFmpeg/DRM initialization fails silently.
+- **System Audio**: Enabled by default and cannot be disabled via UI.
 
 ### Disclaimer
 
