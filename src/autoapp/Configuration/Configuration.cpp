@@ -143,14 +143,16 @@ void Configuration::load() {
   videoFPS_ = static_cast<
       aap_protobuf::service::media::sink::message::VideoFrameRateType>(
       settings
-          .value("FPS", aap_protobuf::service::media::sink::message::
-                            VideoFrameRateType_VIDEO_60FPS)
+          .value("FPS",
+                 static_cast<int>(aap_protobuf::service::media::sink::message::
+                                      VideoFrameRateType::VIDEO_FPS_60))
           .toInt());
   videoResolution_ = static_cast<
       aap_protobuf::service::media::sink::message::VideoCodecResolutionType>(
       settings
-          .value("Resolution", aap_protobuf::service::media::sink::message::
-                                   VideoCodecResolutionType_VIDEO_800x480)
+          .value("Resolution",
+                 static_cast<int>(aap_protobuf::service::media::sink::message::
+                                      VideoCodecResolutionType::VIDEO_800x480))
           .toInt());
   screenDPI_ = settings.value("DPI", 160).toUInt();
   omxLayerIndex_ = settings.value("OMXLayerIndex", 2).toInt();
@@ -240,10 +242,10 @@ void Configuration::load() {
 }
 
 void Configuration::reset() {
-  videoFPS_ = aap_protobuf::service::media::sink::message::
-      VideoFrameRateType_VIDEO_60FPS;
+  videoFPS_ = aap_protobuf::service::media::sink::message::VideoFrameRateType::
+      VIDEO_FPS_60;
   videoResolution_ = aap_protobuf::service::media::sink::message::
-      VideoCodecResolutionType_VIDEO_800x480;
+      VideoCodecResolutionType::VIDEO_800x480;
   screenDPI_ = 160;
   omxLayerIndex_ = 2;
   videoMargins_ = QRect(0, 0, 0, 0);
