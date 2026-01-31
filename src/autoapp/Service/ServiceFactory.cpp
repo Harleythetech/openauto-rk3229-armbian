@@ -38,19 +38,6 @@
 #include <f1x/openauto/autoapp/Projection/QtVideoOutput.hpp>
 #include <f1x/openauto/autoapp/Projection/RtAudioInput.hpp>
 
-// ... (skipping context)
-
-void ServiceFactory::createMediaSourceServices(
-    f1x::openauto::autoapp::service::ServiceList &serviceList,
-    aasdk::messenger::IMessenger::Pointer messenger) {
-  OPENAUTO_LOG(info) << "[ServiceFactory] createMediaSourceServices()";
-  auto audioInput =
-      std::make_shared<projection::RtAudioInput>(1, 16, 16000, configuration_);
-
-  serviceList.emplace_back(
-      std::make_shared<mediasource::MicrophoneMediaSourceService>(
-          ioService_, messenger, std::move(audioInput)));
-}
 #include <f1x/openauto/autoapp/Service/Bluetooth/BluetoothService.hpp>
 #include <f1x/openauto/autoapp/Service/InputSource/InputSourceService.hpp>
 #include <f1x/openauto/autoapp/Service/Sensor/SensorService.hpp>
@@ -153,7 +140,7 @@ void ServiceFactory::createMediaSinkServices(
   // Get configured audio output device ID
   std::string configuredDeviceName = configuration_->getAudioOutputDeviceName();
   uint32_t audioDeviceId =
-      projection::AudioDeviceList::findDeviceByName(configuredDeviceName);
+      projection::AudioDeviceList::findOutputDeviceByName(configuredDeviceName);
 
   OPENAUTO_LOG(info) << "[ServiceFactory] Using audio device: "
                      << (configuredDeviceName.empty() ? "(default)"
@@ -227,9 +214,8 @@ void ServiceFactory::createMediaSourceServices(
     f1x::openauto::autoapp::service::ServiceList &serviceList,
     aasdk::messenger::IMessenger::Pointer messenger) {
   OPENAUTO_LOG(info) << "[ServiceFactory] createMediaSourceServices()";
-  projection::IAudioInput::Pointer audioInput(
-      new projection::QtAudioInput(1, 16, 16000),
-      std::bind(&QObject::deleteLater, std::placeholders::_1));
+  auto audioInput =
+      std::make_shared<projection::RtAudioInput>(1, 16, 16000, configuration_);
   serviceList.emplace_back(
       std::make_shared<mediasource::MicrophoneMediaSourceService>(
           ioService_, messenger, std::move(audioInput)));

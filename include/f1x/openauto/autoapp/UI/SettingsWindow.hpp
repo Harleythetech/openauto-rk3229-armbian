@@ -79,6 +79,7 @@ private slots:
   void on_pushButtonNetwork1_clicked();
   void updateSystemInfo();
   void updateInfo();
+  void onRefreshAudioDevices();
   void onRefreshAudioInputDevices();
 
 public slots:
