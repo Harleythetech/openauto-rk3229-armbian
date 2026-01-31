@@ -21,6 +21,7 @@
 #include <QComboBox>
 #include <QFileDialog>
 #include <QKeyEvent>
+#include <QProcess>
 #include <QWidget>
 #include <f1x/openauto/autoapp/Configuration/IConfiguration.hpp>
 
