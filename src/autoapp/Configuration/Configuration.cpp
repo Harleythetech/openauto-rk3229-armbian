@@ -568,6 +568,14 @@ void Configuration::setAudioOutputDeviceName(const std::string &value) {
   audioOutputDeviceName_ = value;
 }
 
+std::string Configuration::getAudioInputDeviceName() const {
+  return audioInputDeviceName_;
+}
+
+void Configuration::setAudioInputDeviceName(const std::string &value) {
+  audioInputDeviceName_ = value;
+}
+
 QString Configuration::getCSValue(QString searchString) const {
   using namespace std;
   ifstream inFile;

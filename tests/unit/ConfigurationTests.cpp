@@ -96,11 +96,12 @@ TEST_F(ConfigurationTest, SaveAndLoadConfiguration) {
 TEST_F(ConfigurationTest, AudioOutputConfiguration) {
   // Test default audio settings
   auto musicAudioChannelEnabled = configuration->musicAudioChannelEnabled();
-  auto speechAudioChannelEnabled = configuration->speechAudioChannelEnabled();
+  auto guidanceAudioChannelEnabled =
+      configuration->guidanceAudioChannelEnabled();
 
   // Modify settings
   configuration->setMusicAudioChannelEnabled(!musicAudioChannelEnabled);
-  configuration->setSpeechAudioChannelEnabled(!speechAudioChannelEnabled);
+  configuration->setGuidanceAudioChannelEnabled(!guidanceAudioChannelEnabled);
 
   // Save and reload
   configuration->save();
@@ -109,32 +110,40 @@ TEST_F(ConfigurationTest, AudioOutputConfiguration) {
   // Verify changes were persisted
   EXPECT_EQ(!musicAudioChannelEnabled,
             configuration->musicAudioChannelEnabled());
-  EXPECT_EQ(!speechAudioChannelEnabled,
-            configuration->speechAudioChannelEnabled());
+  EXPECT_EQ(!guidanceAudioChannelEnabled,
+            configuration->guidanceAudioChannelEnabled());
 }
 
 // TC-CONF-003 - Video Output Configuration
 TEST_F(ConfigurationTest, VideoOutputConfiguration) {
+  using aap_protobuf::service::media::sink::message::VideoCodecResolutionType;
+  using aap_protobuf::service::media::sink::message::VideoFrameRateType;
+
   // Get current video settings
   auto videoResolution = configuration->getVideoResolution();
   auto fps = configuration->getVideoFPS();
 
   // Change video settings
-  configuration->setVideoResolution(videoResolution == VideoResolution::_480
-                                        ? VideoResolution::_720
-                                        : VideoResolution::_480);
-  configuration->setVideoFPS(fps == VideoFPS::_30 ? VideoFPS::_60
-                                                  : VideoFPS::_30);
+  configuration->setVideoResolution(
+      videoResolution == VideoCodecResolutionType::VIDEO_800x480
+          ? VideoCodecResolutionType::VIDEO_1280x720
+          : VideoCodecResolutionType::VIDEO_800x480);
+  configuration->setVideoFPS(fps == VideoFrameRateType::VIDEO_FPS_30
+                                 ? VideoFrameRateType::VIDEO_FPS_60
+                                 : VideoFrameRateType::VIDEO_FPS_30);
 
   // Save and reload
   configuration->save();
   configuration->load();
 
   // Verify changes were persisted
-  EXPECT_EQ(videoResolution == VideoResolution::_480 ? VideoResolution::_720
-                                                     : VideoResolution::_480,
+  EXPECT_EQ(videoResolution == VideoCodecResolutionType::VIDEO_800x480
+                ? VideoCodecResolutionType::VIDEO_1280x720
+                : VideoCodecResolutionType::VIDEO_800x480,
             configuration->getVideoResolution());
-  EXPECT_EQ(fps == VideoFPS::_30 ? VideoFPS::_60 : VideoFPS::_30,
+  EXPECT_EQ(fps == VideoFrameRateType::VIDEO_FPS_30
+                ? VideoFrameRateType::VIDEO_FPS_60
+                : VideoFrameRateType::VIDEO_FPS_30,
             configuration->getVideoFPS());
 }
 
