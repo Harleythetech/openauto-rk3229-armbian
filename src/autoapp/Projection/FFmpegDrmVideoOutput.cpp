@@ -168,11 +168,16 @@ get_format_callback(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts) {
   return pix_fmts[0];
 }
 
-// Static member definitions for DRM cursor
-int FFmpegDrmVideoOutput::cursorDrmFd_ = -1;
+// Static member definitions for DRM cursor (plane-based, not legacy cursor API)
+int *FFmpegDrmVideoOutput::cursorDrmFdPtr_ = nullptr;
 uint32_t FFmpegDrmVideoOutput::cursorCrtcId_ = 0;
+uint32_t FFmpegDrmVideoOutput::cursorPlaneId_ = 41; // RK3229 cursor plane
 uint32_t FFmpegDrmVideoOutput::cursorBufferHandle_ = 0;
 uint32_t FFmpegDrmVideoOutput::cursorFbId_ = 0;
+int FFmpegDrmVideoOutput::cursorX_ = 0;
+int FFmpegDrmVideoOutput::cursorY_ = 0;
+int FFmpegDrmVideoOutput::cursorWidth_ = 64;
+int FFmpegDrmVideoOutput::cursorHeight_ = 64;
 bool FFmpegDrmVideoOutput::cursorInitialized_ = false;
 bool FFmpegDrmVideoOutput::cursorVisible_ = false;
 bool FFmpegDrmVideoOutput::cursorEnabled_ =
@@ -1331,79 +1336,114 @@ bool FFmpegDrmVideoOutput::initCursor() {
     return true;
   }
 
-  OPENAUTO_LOG(info)
-      << "[FFmpegDrmVideoOutput] Initializing DRM hardware cursor";
-
-  cursorDrmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
-  if (cursorDrmFd_ < 0) {
+  // Use the main DRM fd instead of opening a new one
+  if (drmFd_ < 0) {
     OPENAUTO_LOG(warning)
-        << "[FFmpegDrmVideoOutput] Failed to open DRM for cursor";
+        << "[FFmpegDrmVideoOutput] Cannot init cursor - DRM not initialized";
     return false;
   }
 
-  drmModeRes *resources = drmModeGetResources(cursorDrmFd_);
-  if (!resources) {
-    close(cursorDrmFd_);
-    cursorDrmFd_ = -1;
-    return false;
-  }
+  OPENAUTO_LOG(info)
+      << "[FFmpegDrmVideoOutput] Initializing DRM plane-based cursor (plane "
+      << cursorPlaneId_ << ")";
 
-  if (resources->count_crtcs > 0) {
-    cursorCrtcId_ = resources->crtcs[0];
-  }
-  drmModeFreeResources(resources);
+  // Store pointer to main DRM fd for static methods
+  cursorDrmFdPtr_ = &drmFd_;
+  cursorCrtcId_ = crtcId_;
 
-  if (cursorCrtcId_ == 0) {
-    close(cursorDrmFd_);
-    cursorDrmFd_ = -1;
-    return false;
-  }
-
-  // Create cursor buffer (64x64 ARGB)
-  const int cursorSize = 64;
+  // Create cursor dumb buffer (64x64 ARGB8888)
   struct drm_mode_create_dumb createReq = {};
-  createReq.width = cursorSize;
-  createReq.height = cursorSize;
+  createReq.width = cursorWidth_;
+  createReq.height = cursorHeight_;
   createReq.bpp = 32;
 
-  if (ioctl(cursorDrmFd_, DRM_IOCTL_MODE_CREATE_DUMB, &createReq) < 0) {
-    close(cursorDrmFd_);
-    cursorDrmFd_ = -1;
+  if (ioctl(drmFd_, DRM_IOCTL_MODE_CREATE_DUMB, &createReq) < 0) {
+    OPENAUTO_LOG(warning)
+        << "[FFmpegDrmVideoOutput] Failed to create cursor dumb buffer: "
+        << strerror(errno);
     return false;
   }
 
   cursorBufferHandle_ = createReq.handle;
 
-  // Map and draw cursor
+  // Create framebuffer for the cursor
+  // Use DRM_FORMAT_ARGB8888 for transparency support
+  uint32_t handles[4] = {cursorBufferHandle_, 0, 0, 0};
+  uint32_t pitches[4] = {createReq.pitch, 0, 0, 0};
+  uint32_t offsets[4] = {0, 0, 0, 0};
+
+  if (drmModeAddFB2(drmFd_, cursorWidth_, cursorHeight_, DRM_FORMAT_ARGB8888,
+                    handles, pitches, offsets, &cursorFbId_, 0) < 0) {
+    OPENAUTO_LOG(warning)
+        << "[FFmpegDrmVideoOutput] Failed to create cursor framebuffer: "
+        << strerror(errno);
+    // Cleanup dumb buffer
+    struct drm_mode_destroy_dumb destroyReq = {};
+    destroyReq.handle = cursorBufferHandle_;
+    ioctl(drmFd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroyReq);
+    cursorBufferHandle_ = 0;
+    return false;
+  }
+
+  // Map and draw cursor image
   struct drm_mode_map_dumb mapReq = {};
   mapReq.handle = cursorBufferHandle_;
 
-  if (ioctl(cursorDrmFd_, DRM_IOCTL_MODE_MAP_DUMB, &mapReq) < 0) {
-    close(cursorDrmFd_);
-    cursorDrmFd_ = -1;
+  if (ioctl(drmFd_, DRM_IOCTL_MODE_MAP_DUMB, &mapReq) < 0) {
+    OPENAUTO_LOG(warning)
+        << "[FFmpegDrmVideoOutput] Failed to map cursor buffer: "
+        << strerror(errno);
+    drmModeRmFB(drmFd_, cursorFbId_);
+    cursorFbId_ = 0;
+    struct drm_mode_destroy_dumb destroyReq = {};
+    destroyReq.handle = cursorBufferHandle_;
+    ioctl(drmFd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroyReq);
+    cursorBufferHandle_ = 0;
     return false;
   }
 
   uint32_t *cursorData =
       (uint32_t *)mmap(0, createReq.size, PROT_READ | PROT_WRITE, MAP_SHARED,
-                       cursorDrmFd_, mapReq.offset);
+                       drmFd_, mapReq.offset);
   if (cursorData == MAP_FAILED) {
-    close(cursorDrmFd_);
-    cursorDrmFd_ = -1;
+    OPENAUTO_LOG(warning)
+        << "[FFmpegDrmVideoOutput] Failed to mmap cursor buffer: "
+        << strerror(errno);
+    drmModeRmFB(drmFd_, cursorFbId_);
+    cursorFbId_ = 0;
+    struct drm_mode_destroy_dumb destroyReq = {};
+    destroyReq.handle = cursorBufferHandle_;
+    ioctl(drmFd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroyReq);
+    cursorBufferHandle_ = 0;
     return false;
   }
 
-  // Clear and draw arrow cursor
+  // Clear to transparent
   memset(cursorData, 0, createReq.size);
-  const uint32_t white = 0xFFFFFFFF;
-  const uint32_t black = 0xFF000000;
 
+  // Draw a simple arrow cursor (white with black outline)
+  const uint32_t white = 0xFFFFFFFF; // ARGB: opaque white
+  const uint32_t black = 0xFF000000; // ARGB: opaque black
+
+  // Draw arrow cursor shape (16x16 arrow)
   for (int y = 0; y < 16; y++) {
     for (int x = 0; x <= y && x < 12; x++) {
       if (x == 0 || x == y || y == 15) {
-        cursorData[y * cursorSize + x] = black;
+        // Outline
+        cursorData[y * cursorWidth_ + x] = black;
       } else {
-        cursorData[y * cursorSize + x] = white;
+        // Fill
+        cursorData[y * cursorWidth_ + x] = white;
+      }
+    }
+  }
+  // Arrow tail
+  for (int y = 10; y < 16; y++) {
+    for (int x = 4; x < 8; x++) {
+      if (x == 4 || x == 7 || y == 15) {
+        cursorData[y * cursorWidth_ + x] = black;
+      } else {
+        cursorData[y * cursorWidth_ + x] = white;
       }
     }
   }
@@ -1412,9 +1452,12 @@ bool FFmpegDrmVideoOutput::initCursor() {
 
   cursorInitialized_ = true;
   cursorVisible_ = false;
+  cursorX_ = 0;
+  cursorY_ = 0;
 
-  OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Cursor initialized, CRTC: "
-                     << cursorCrtcId_;
+  OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Cursor initialized on plane "
+                     << cursorPlaneId_ << ", CRTC: " << cursorCrtcId_
+                     << ", FB: " << cursorFbId_;
   return true;
 }
 
@@ -1425,20 +1468,28 @@ void FFmpegDrmVideoOutput::cleanupCursor() {
     return;
   }
 
-  if (cursorDrmFd_ >= 0) {
-    drmModeSetCursor(cursorDrmFd_, cursorCrtcId_, 0, 0, 0);
+  // Disable cursor plane
+  if (cursorDrmFdPtr_ && *cursorDrmFdPtr_ >= 0) {
+    // Disable the cursor plane by setting FB to 0
+    drmModeSetPlane(*cursorDrmFdPtr_, cursorPlaneId_, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0);
 
+    // Remove framebuffer
+    if (cursorFbId_ != 0) {
+      drmModeRmFB(*cursorDrmFdPtr_, cursorFbId_);
+      cursorFbId_ = 0;
+    }
+
+    // Destroy dumb buffer
     if (cursorBufferHandle_ != 0) {
       struct drm_mode_destroy_dumb destroyReq = {};
       destroyReq.handle = cursorBufferHandle_;
-      ioctl(cursorDrmFd_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroyReq);
+      ioctl(*cursorDrmFdPtr_, DRM_IOCTL_MODE_DESTROY_DUMB, &destroyReq);
       cursorBufferHandle_ = 0;
     }
-
-    close(cursorDrmFd_);
-    cursorDrmFd_ = -1;
   }
 
+  cursorDrmFdPtr_ = nullptr;
   cursorInitialized_ = false;
   cursorVisible_ = false;
   OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Cursor cleaned up";
@@ -1452,35 +1503,60 @@ void FFmpegDrmVideoOutput::updateCursorPosition(int x, int y) {
     return;
   }
 
-  if (!cursorInitialized_ || cursorDrmFd_ < 0) {
+  if (!cursorInitialized_ || !cursorDrmFdPtr_ || *cursorDrmFdPtr_ < 0) {
     return;
   }
 
-  if (!cursorVisible_) {
-    if (drmModeSetCursor(cursorDrmFd_, cursorCrtcId_, cursorBufferHandle_, 64,
-                         64) == 0) {
-      cursorVisible_ = true;
-    }
-  }
+  // Store position
+  cursorX_ = x;
+  cursorY_ = y;
 
-  drmModeMoveCursor(cursorDrmFd_, cursorCrtcId_, x, y);
+  // Set cursor plane position using drmModeSetPlane
+  // This sets the cursor framebuffer at position (x, y) on the screen
+  int ret = drmModeSetPlane(
+      *cursorDrmFdPtr_, cursorPlaneId_, cursorCrtcId_, cursorFbId_, 0, x, y,
+      cursorWidth_, cursorHeight_, // dest x, y, w, h
+      0, 0, cursorWidth_ << 16,
+      cursorHeight_ << 16); // src x, y, w, h (16.16 fixed point)
+
+  if (ret == 0) {
+    if (!cursorVisible_) {
+      cursorVisible_ = true;
+      OPENAUTO_LOG(info)
+          << "[FFmpegDrmVideoOutput] Cursor now visible on plane "
+          << cursorPlaneId_;
+    }
+  } else if (!cursorVisible_) {
+    // Only log error once
+    OPENAUTO_LOG(warning)
+        << "[FFmpegDrmVideoOutput] Failed to set cursor plane: "
+        << strerror(-ret);
+  }
 }
 
 void FFmpegDrmVideoOutput::setCursorVisible(bool visible) {
   std::lock_guard<std::mutex> lock(cursorMutex_);
 
-  if (!cursorInitialized_ || cursorDrmFd_ < 0) {
+  if (!cursorInitialized_ || !cursorDrmFdPtr_ || *cursorDrmFdPtr_ < 0) {
     return;
   }
 
   if (visible && !cursorVisible_) {
-    if (drmModeSetCursor(cursorDrmFd_, cursorCrtcId_, cursorBufferHandle_, 64,
-                         64) == 0) {
+    // Enable cursor plane at current position
+    int ret = drmModeSetPlane(*cursorDrmFdPtr_, cursorPlaneId_, cursorCrtcId_,
+                              cursorFbId_, 0, cursorX_, cursorY_, cursorWidth_,
+                              cursorHeight_, 0, 0, cursorWidth_ << 16,
+                              cursorHeight_ << 16);
+    if (ret == 0) {
       cursorVisible_ = true;
+      OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Cursor shown";
     }
   } else if (!visible && cursorVisible_) {
-    drmModeSetCursor(cursorDrmFd_, cursorCrtcId_, 0, 0, 0);
+    // Disable cursor plane by setting FB to 0
+    drmModeSetPlane(*cursorDrmFdPtr_, cursorPlaneId_, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0);
     cursorVisible_ = false;
+    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Cursor hidden";
   }
 }
 

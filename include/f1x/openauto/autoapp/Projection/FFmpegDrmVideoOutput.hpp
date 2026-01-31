@@ -63,7 +63,6 @@ extern "C" {
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
 #include <libswscale/swscale.h>
-
 }
 
 #include <xf86drm.h>
@@ -77,7 +76,6 @@ extern "C" {
 #include <queue>
 #include <string>
 #include <thread>
-
 
 namespace f1x {
 namespace openauto {
@@ -279,10 +277,16 @@ private:
   uint32_t previousHandle_; // Previous GEM handle
 
   // DRM cursor state (static for access from InputDevice)
-  static int cursorDrmFd_;
+  // Uses dedicated cursor plane (plane 41 on RK3229, zpos 2)
+  static int *cursorDrmFdPtr_; // Pointer to shared drmFd_ (set during init)
   static uint32_t cursorCrtcId_;
+  static uint32_t cursorPlaneId_; // Cursor plane ID (41 on RK3229)
   static uint32_t cursorBufferHandle_;
   static uint32_t cursorFbId_;
+  static int cursorX_;      // Current cursor X position
+  static int cursorY_;      // Current cursor Y position
+  static int cursorWidth_;  // Cursor buffer width (64)
+  static int cursorHeight_; // Cursor buffer height (64)
   static bool cursorInitialized_;
   static bool cursorVisible_;
   static bool cursorEnabled_; // Set from configuration - controls if DRM cursor
