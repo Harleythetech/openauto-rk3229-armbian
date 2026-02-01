@@ -524,12 +524,39 @@ namespace f1x
             return false;
           }
 
-          // Enable DRM master and atomic modesetting
-          if (drmSetMaster(drmFd_) < 0)
+          // Force-acquire DRM master from Qt EGLFS
+          // Qt EGLFS holds master, so we need to steal it
+          // First, find and close any other DRM fds in this process
+          // Then force set master on our new fd
+          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Attempting to acquire DRM master...";
+
+          // Try to become DRM master - may need multiple attempts
+          // as Qt's eglfs_kms may be holding it
+          bool gotMaster = false;
+          for (int attempt = 0; attempt < 3; attempt++)
+          {
+            if (drmSetMaster(drmFd_) == 0)
+            {
+              gotMaster = true;
+              OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Acquired DRM master on attempt " << (attempt + 1);
+              break;
+            }
+            // Small delay between attempts
+            usleep(50000); // 50ms
+          }
+
+          if (!gotMaster)
           {
             OPENAUTO_LOG(warning)
-                << "[FFmpegDrmVideoOutput] Failed to become DRM master (may be shared)";
-            // Continue anyway - we might be able to use atomic without master
+                << "[FFmpegDrmVideoOutput] Could not acquire DRM master - Qt EGLFS holds it";
+            OPENAUTO_LOG(warning)
+                << "[FFmpegDrmVideoOutput] Continuing without master - plane ops may fail";
+          }
+
+          // Enable universal planes (required to access overlay planes)
+          if (drmSetClientCap(drmFd_, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) < 0)
+          {
+            OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Could not enable universal planes";
           }
 
           // Enable client capability for atomic modesetting
@@ -628,13 +655,13 @@ namespace f1x
           OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using CRTC: " << crtcId_;
 
           // RK3229 plane layout (from modetest):
-          //   Plane 31 = Primary (used by Qt EGLFS for UI)
-          //   Plane 36 = Overlay (used by FFmpeg for video - above primary)
+          //   Plane 31 = Primary
+          //   Plane 36 = Overlay
           //   Plane 41 = Cursor
-          // Force overlay plane 36 to avoid DRM conflict with Qt EGLFS on primary
-          planeId_ = 36;
-          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using overlay plane: " << planeId_
-                             << " (Qt uses primary plane 31)";
+          // Use primary plane 31 for video (overlay 36 has issues on RK3229)
+          // We take over DRM master from Qt EGLFS when video starts
+          planeId_ = 31;
+          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using primary plane: " << planeId_;
 
           drmModeFreeConnector(connector);
           drmModeFreeResources(resources);
@@ -742,8 +769,7 @@ namespace f1x
                                      "COLOR_ENCODING enum";
           }
 
-          // Setup atomic API properties for overlay plane control
-          setupAtomicProperties();
+          // Note: We use legacy drmModeSetPlane API (not atomic) since we take DRM master
         }
 
         // ============================================================================
@@ -1105,45 +1131,12 @@ namespace f1x
             }
 
             // Set the plane to display the framebuffer (scaled to display)
-            if (atomicSupported_)
-            {
-              // Use atomic API (works without DRM master on overlay planes)
-              drmModeAtomicReqPtr req = drmModeAtomicAlloc();
-              if (!req)
-              {
-                OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Failed to allocate atomic request";
-                drmModeRmFB(drmFd_, fbId);
-                return false;
-              }
-
-              // Set plane properties atomically
-              drmModeAtomicAddProperty(req, planeId_, planePropFbId_, fbId);
-              drmModeAtomicAddProperty(req, planeId_, planePropCrtcId_, crtcId_);
-              drmModeAtomicAddProperty(req, planeId_, planePropCrtcX_, 0);
-              drmModeAtomicAddProperty(req, planeId_, planePropCrtcY_, 0);
-              drmModeAtomicAddProperty(req, planeId_, planePropCrtcW_, mode_.hdisplay);
-              drmModeAtomicAddProperty(req, planeId_, planePropCrtcH_, mode_.vdisplay);
-              drmModeAtomicAddProperty(req, planeId_, planePropSrcX_, 0);
-              drmModeAtomicAddProperty(req, planeId_, planePropSrcY_, 0);
-              drmModeAtomicAddProperty(req, planeId_, planePropSrcW_, (uint64_t)frame->width << 16);
-              drmModeAtomicAddProperty(req, planeId_, planePropSrcH_, (uint64_t)frame->height << 16);
-
-              // Commit without modeset flag - allows non-master commits on overlay
-              ret = drmModeAtomicCommit(drmFd_, req,
-                                        DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT,
-                                        nullptr);
-
-              drmModeAtomicFree(req);
-            }
-            else
-            {
-              // Legacy API fallback (requires DRM master)
-              ret = drmModeSetPlane(
-                  drmFd_, planeId_, crtcId_, fbId, 0, 0, 0, mode_.hdisplay,
-                  mode_.vdisplay, // Display area (full screen)
-                  0, 0, frame->width << 16,
-                  frame->height << 16); // Source area (16.16 fixed point)
-            }
+            // Use legacy API - we have DRM master after stealing from Qt
+            ret = drmModeSetPlane(
+                drmFd_, planeId_, crtcId_, fbId, 0, 0, 0, mode_.hdisplay,
+                mode_.vdisplay, // Display area (full screen)
+                0, 0, frame->width << 16,
+                frame->height << 16); // Source area (16.16 fixed point)
 
             if (ret < 0)
             {
@@ -1345,39 +1338,10 @@ namespace f1x
             return false;
           }
 
-          // Display the framebuffer
-          if (atomicSupported_)
-          {
-            // Use atomic API for overlay plane
-            drmModeAtomicReqPtr req = drmModeAtomicAlloc();
-            if (!req)
-            {
-              OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Failed to allocate atomic request (SW)";
-              return false;
-            }
-
-            drmModeAtomicAddProperty(req, planeId_, planePropFbId_, swDumbFbId_);
-            drmModeAtomicAddProperty(req, planeId_, planePropCrtcId_, crtcId_);
-            drmModeAtomicAddProperty(req, planeId_, planePropCrtcX_, 0);
-            drmModeAtomicAddProperty(req, planeId_, planePropCrtcY_, 0);
-            drmModeAtomicAddProperty(req, planeId_, planePropCrtcW_, mode_.hdisplay);
-            drmModeAtomicAddProperty(req, planeId_, planePropCrtcH_, mode_.vdisplay);
-            drmModeAtomicAddProperty(req, planeId_, planePropSrcX_, 0);
-            drmModeAtomicAddProperty(req, planeId_, planePropSrcY_, 0);
-            drmModeAtomicAddProperty(req, planeId_, planePropSrcW_, (uint64_t)frame->width << 16);
-            drmModeAtomicAddProperty(req, planeId_, planePropSrcH_, (uint64_t)frame->height << 16);
-
-            ret = drmModeAtomicCommit(drmFd_, req,
-                                      DRM_MODE_ATOMIC_NONBLOCK | DRM_MODE_PAGE_FLIP_EVENT,
-                                      nullptr);
-            drmModeAtomicFree(req);
-          }
-          else
-          {
-            ret = drmModeSetPlane(drmFd_, planeId_, crtcId_, swDumbFbId_, 0, 0, 0,
-                                  mode_.hdisplay, mode_.vdisplay, 0, 0,
-                                  frame->width << 16, frame->height << 16);
-          }
+          // Display the framebuffer using legacy API (we have DRM master)
+          ret = drmModeSetPlane(drmFd_, planeId_, crtcId_, swDumbFbId_, 0, 0, 0,
+                                mode_.hdisplay, mode_.vdisplay, 0, 0,
+                                frame->width << 16, frame->height << 16);
 
           if (ret < 0)
           {

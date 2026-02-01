@@ -53,7 +53,7 @@ void setOpenAutoEnvironmentDefaults()
     }
   };
 
-  // Qt eglfs mode for DRM/KMS (FFmpeg uses overlay plane 36)
+  // Qt eglfs mode for DRM/KMS (FFmpeg takes DRM master for video on plane 31)
   setIfUnset("QT_QPA_PLATFORM", "eglfs");
   setIfUnset("QT_QPA_EGLFS_INTEGRATION", "eglfs_kms");
   setIfUnset("QT_QPA_EGLFS_KMS_ATOMIC", "1");
@@ -64,7 +64,7 @@ void setOpenAutoEnvironmentDefaults()
   setIfUnset("ALSA_PCM_CARD", "0");
   setIfUnset("RTAUDIO_ALSA_DEVICE", "hw:0,0");
 
-  OPENAUTO_LOG(info) << "[AutoApp] Launching OpenAuto (eglfs + FFmpeg DRM)...";
+  OPENAUTO_LOG(info) << "[AutoApp] Launching OpenAuto (eglfs + FFmpeg DRM master takeover)...";
   OPENAUTO_LOG(info) << "[AutoApp] Dev: Harleythetech";
   OPENAUTO_LOG(info)
       << "[AutoApp] Git: "
