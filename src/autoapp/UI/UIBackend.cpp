@@ -316,8 +316,8 @@ namespace f1x
                         return "None";
                     case configuration::BluetoothAdapterType::LOCAL:
                         return "Local";
-                    case configuration::BluetoothAdapterType::REMOTE:
-                        return "Remote";
+                    case configuration::BluetoothAdapterType::EXTERNAL:
+                        return "External";
                     default:
                         return "Unknown";
                     }
