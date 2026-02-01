@@ -275,6 +275,7 @@ namespace f1x
 
           // DRM display state
           int drmFd_;
+          bool ownsDrmFd_; // True if we opened the fd, false if using Qt's fd
           uint32_t connectorId_;
           uint32_t crtcId_;
           uint32_t planeId_;

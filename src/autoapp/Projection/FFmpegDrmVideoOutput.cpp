@@ -89,6 +89,11 @@ extern "C"
 #include <f1x/openauto/Common/Log.hpp>
 #include <f1x/openauto/autoapp/Projection/FFmpegDrmVideoOutput.hpp>
 
+// Qt includes for accessing DRM fd from EGLFS
+#include <QCoreApplication>
+#include <QGuiApplication>
+#include <qpa/qplatformnativeinterface.h>
+
 // ============================================================================
 // Rockchip VOP Hardware Constants
 // ============================================================================
@@ -208,7 +213,7 @@ namespace f1x
               packet_(nullptr), frame_(nullptr), hwDeviceCtx_(nullptr),
               displayedFrame_(nullptr), previousDisplayedFrame_(nullptr),
               swsCtx_(nullptr), swDumbHandle_(0), swDumbFbId_(0), swDumbMap_(nullptr),
-              swDumbSize_(0), swDumbPitch_(0), drmFd_(-1), connectorId_(0), crtcId_(0),
+              swDumbSize_(0), swDumbPitch_(0), drmFd_(-1), ownsDrmFd_(false), connectorId_(0), crtcId_(0),
               planeId_(0), drmInitialized_(false), usingHwAccel_(false),
               currentFbId_(0), previousFbId_(0), currentHandle_(0), previousHandle_(0),
               planePropFbId_(0), planePropCrtcId_(0), planePropCrtcX_(0),
@@ -514,44 +519,59 @@ namespace f1x
         {
           OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Initializing DRM display";
 
-          // Open DRM device
-          drmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
-          if (drmFd_ < 0)
+          // Try to get Qt's DRM fd first (shares DRM master context)
+          bool usingQtDrmFd = false;
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+          // Try to get DRM fd from Qt's EGLFS KMS integration
+          // This allows us to share the DRM master context
+          QGuiApplication *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
+          if (app)
           {
-            OPENAUTO_LOG(error)
-                << "[FFmpegDrmVideoOutput] Failed to open /dev/dri/card0: "
-                << strerror(errno);
-            return false;
+            QPlatformNativeInterface *native = app->platformNativeInterface();
+            if (native)
+            {
+              // Qt EGLFS KMS exposes the DRM fd via native interface
+              void *drmFdPtr = native->nativeResourceForIntegration("dri_fd");
+              if (drmFdPtr)
+              {
+                drmFd_ = *static_cast<int *>(drmFdPtr);
+                if (drmFd_ >= 0)
+                {
+                  usingQtDrmFd = true;
+                  OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using Qt's DRM fd: " << drmFd_ << " (shared master)";
+                }
+              }
+            }
           }
+#endif
 
-          // Force-acquire DRM master from Qt EGLFS
-          // Qt EGLFS holds master, so we need to steal it
-          // First, find and close any other DRM fds in this process
-          // Then force set master on our new fd
-          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Attempting to acquire DRM master...";
-
-          // Try to become DRM master - may need multiple attempts
-          // as Qt's eglfs_kms may be holding it
-          bool gotMaster = false;
-          for (int attempt = 0; attempt < 3; attempt++)
+          // Fallback: open our own DRM device
+          if (!usingQtDrmFd)
           {
+            drmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+            if (drmFd_ < 0)
+            {
+              OPENAUTO_LOG(error)
+                  << "[FFmpegDrmVideoOutput] Failed to open /dev/dri/card0: "
+                  << strerror(errno);
+              return false;
+            }
+            OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Opened own DRM fd: " << drmFd_;
+
+            // Try to become DRM master (will likely fail if Qt has it)
             if (drmSetMaster(drmFd_) == 0)
             {
-              gotMaster = true;
-              OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Acquired DRM master on attempt " << (attempt + 1);
-              break;
+              OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Acquired DRM master";
             }
-            // Small delay between attempts
-            usleep(50000); // 50ms
+            else
+            {
+              OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Could not acquire DRM master - Qt EGLFS holds it";
+            }
           }
 
-          if (!gotMaster)
-          {
-            OPENAUTO_LOG(warning)
-                << "[FFmpegDrmVideoOutput] Could not acquire DRM master - Qt EGLFS holds it";
-            OPENAUTO_LOG(warning)
-                << "[FFmpegDrmVideoOutput] Continuing without master - plane ops may fail";
-          }
+          // Track if we own the fd (for cleanup)
+          ownsDrmFd_ = !usingQtDrmFd;
 
           // Enable universal planes (required to access overlay planes)
           if (drmSetClientCap(drmFd_, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) < 0)
@@ -655,13 +675,14 @@ namespace f1x
           OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using CRTC: " << crtcId_;
 
           // RK3229 plane layout (from modetest):
-          //   Plane 31 = Primary
-          //   Plane 36 = Overlay
+          //   Plane 31 = Primary (Qt EGLFS uses this for UI)
+          //   Plane 36 = Overlay (FFmpeg uses this for video)
           //   Plane 41 = Cursor
-          // Use primary plane 31 for video (overlay 36 has issues on RK3229)
-          // We take over DRM master from Qt EGLFS when video starts
-          planeId_ = 31;
-          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using primary plane: " << planeId_;
+          // Use overlay plane 36 for video - Qt keeps primary plane 31
+          // Overlay renders ON TOP of primary, so video appears over Qt UI
+          planeId_ = 36;
+          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using overlay plane: " << planeId_
+                             << " (Qt uses primary 31)";
 
           drmModeFreeConnector(connector);
           drmModeFreeResources(resources);
@@ -1512,12 +1533,22 @@ namespace f1x
 
           if (drmFd_ >= 0)
           {
-            drmDropMaster(drmFd_);
-            close(drmFd_);
+            // Only close if we own the fd (not shared from Qt)
+            if (ownsDrmFd_)
+            {
+              drmDropMaster(drmFd_);
+              close(drmFd_);
+              OPENAUTO_LOG(debug) << "[FFmpegDrmVideoOutput] Closed owned DRM fd";
+            }
+            else
+            {
+              OPENAUTO_LOG(debug) << "[FFmpegDrmVideoOutput] Keeping Qt's DRM fd open";
+            }
             drmFd_ = -1;
           }
 
           drmInitialized_ = false;
+          ownsDrmFd_ = false;
           OPENAUTO_LOG(debug) << "[FFmpegDrmVideoOutput] DRM cleaned up";
         }
 
