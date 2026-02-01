@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtGraphicalEffects 1.15
 import ".."
 
 // TileButton - Large touch-friendly button with icon and label
@@ -27,19 +28,24 @@ Rectangle {
         anchors.centerIn: parent
         spacing: Theme.spacingSmall
 
-        // Icon
-        Image {
-            id: iconImage
+        // Icon with ColorOverlay for tinting
+        Item {
             anchors.horizontalCenter: parent.horizontalCenter
             width: Theme.iconSize
             height: Theme.iconSize
-            source: root.iconSource
-            fillMode: Image.PreserveAspectFit
-            visible: iconSource !== ""
+            visible: root.iconSource !== ""
 
-            // Colorize the icon
-            layer.enabled: true
-            layer.effect: ColorOverlay {
+            Image {
+                id: iconImage
+                anchors.fill: parent
+                source: root.iconSource
+                fillMode: Image.PreserveAspectFit
+                visible: false
+            }
+
+            ColorOverlay {
+                anchors.fill: iconImage
+                source: iconImage
                 color: root.iconColor
             }
         }
@@ -50,18 +56,18 @@ Rectangle {
             width: Theme.iconSize
             height: Theme.iconSize
             radius: 8
-            color: buttonColor
+            color: "transparent"
             border.width: 2
-            border.color: Theme.textSecondary
-            visible: iconSource === ""
+            border.color: Theme.primaryColor
+            visible: root.iconSource === ""
 
             Text {
                 anchors.centerIn: parent
-                text: label.charAt(0).toUpperCase()
+                text: root.label.length > 0 ? root.label.charAt(0).toUpperCase() : "?"
                 font.pixelSize: Theme.fontSizeLarge
                 font.family: Theme.fontFamily
                 font.bold: true
-                color: Theme.textPrimary
+                color: Theme.primaryColor
             }
         }
 
