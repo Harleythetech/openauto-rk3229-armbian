@@ -75,6 +75,7 @@ extern "C"
 #include <unistd.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <dirent.h>
 
 // Signal handling for clean shutdown
 #include <atomic>
@@ -83,16 +84,12 @@ extern "C"
 // Standard library
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 
 // OpenAuto includes
 #include <aasdk/Common/Data.hpp>
 #include <f1x/openauto/Common/Log.hpp>
 #include <f1x/openauto/autoapp/Projection/FFmpegDrmVideoOutput.hpp>
-
-// Qt includes for accessing DRM fd from EGLFS
-#include <QCoreApplication>
-#include <QGuiApplication>
-#include <qpa/qplatformnativeinterface.h>
 
 // ============================================================================
 // Rockchip VOP Hardware Constants
@@ -519,35 +516,50 @@ namespace f1x
         {
           OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Initializing DRM display";
 
-          // Try to get Qt's DRM fd first (shares DRM master context)
-          bool usingQtDrmFd = false;
+          // Strategy: Find Qt EGLFS's DRM fd in /proc/self/fd and dup() it
+          // This shares DRM master context so we can use planes
+          bool foundQtFd = false;
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
-          // Try to get DRM fd from Qt's EGLFS KMS integration
-          // This allows us to share the DRM master context
-          QGuiApplication *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance());
-          if (app)
+          // Scan /proc/self/fd for existing DRM fds opened by Qt EGLFS
+          DIR *dir = opendir("/proc/self/fd");
+          if (dir)
           {
-            QPlatformNativeInterface *native = app->platformNativeInterface();
-            if (native)
+            struct dirent *entry;
+            while ((entry = readdir(dir)) != nullptr)
             {
-              // Qt EGLFS KMS exposes the DRM fd via native interface
-              void *drmFdPtr = native->nativeResourceForIntegration("dri_fd");
-              if (drmFdPtr)
+              if (entry->d_type != DT_LNK)
+                continue;
+
+              char linkPath[256];
+              char targetPath[256];
+              snprintf(linkPath, sizeof(linkPath), "/proc/self/fd/%s", entry->d_name);
+
+              ssize_t len = readlink(linkPath, targetPath, sizeof(targetPath) - 1);
+              if (len > 0)
               {
-                drmFd_ = *static_cast<int *>(drmFdPtr);
-                if (drmFd_ >= 0)
+                targetPath[len] = '\0';
+                // Look for DRM card0 (Qt EGLFS has this open)
+                if (strstr(targetPath, "/dev/dri/card0") != nullptr)
                 {
-                  usingQtDrmFd = true;
-                  OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using Qt's DRM fd: " << drmFd_ << " (shared master)";
+                  int existingFd = atoi(entry->d_name);
+                  // Dup the fd to share the DRM master context
+                  drmFd_ = dup(existingFd);
+                  if (drmFd_ >= 0)
+                  {
+                    foundQtFd = true;
+                    ownsDrmFd_ = true; // We own the dup'd fd
+                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Found Qt's DRM fd "
+                                       << existingFd << ", dup'd to " << drmFd_;
+                    break;
+                  }
                 }
               }
             }
+            closedir(dir);
           }
-#endif
 
           // Fallback: open our own DRM device
-          if (!usingQtDrmFd)
+          if (!foundQtFd)
           {
             drmFd_ = ::open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
             if (drmFd_ < 0)
@@ -557,6 +569,7 @@ namespace f1x
                   << strerror(errno);
               return false;
             }
+            ownsDrmFd_ = true;
             OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Opened own DRM fd: " << drmFd_;
 
             // Try to become DRM master (will likely fail if Qt has it)
@@ -569,9 +582,6 @@ namespace f1x
               OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Could not acquire DRM master - Qt EGLFS holds it";
             }
           }
-
-          // Track if we own the fd (for cleanup)
-          ownsDrmFd_ = !usingQtDrmFd;
 
           // Enable universal planes (required to access overlay planes)
           if (drmSetClientCap(drmFd_, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1) < 0)
