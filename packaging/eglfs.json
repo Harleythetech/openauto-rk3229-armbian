@@ -1,8 +1,9 @@
 {
   "device": "/dev/dri/card0",
-  "hwcursor": true,
+  "hwcursor": false,
   "pbuffers": true,
+  "separateScreens": false,
   "outputs": [
-    { "name": "HDMI-A-1", "mode": "1920x1080" }
+    { "name": "HDMI-A-1", "mode": "preferred" }
   ]
 }
