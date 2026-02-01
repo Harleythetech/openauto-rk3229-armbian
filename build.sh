@@ -335,15 +335,8 @@ else
     echo "All build dependencies found."
 fi
 
-# Copy launcher script and dependencies if they exist (Docker build environment)
-# The script at /root/openauto.sh configures linuxfb, kmssink, and RTAudio
-if [ -f "/root/openauto.sh" ]; then
-    echo ""
-    echo "Copying launcher script from /root/openauto.sh..."
-    mkdir -p "${SOURCE_DIR}/packaging/opt/openauto"
-    cp -v "/root/openauto.sh" "${SOURCE_DIR}/packaging/opt/openauto/openauto.sh"
-    chmod +x "${SOURCE_DIR}/packaging/opt/openauto/openauto.sh"
-fi
+# Note: OpenAuto now uses autologin + .bash_profile instead of openauto.sh
+# The bash_profile is installed from packaging/bash_profile to /root/.bash_profile
 
 # Copy custom libraries from /root/deps/ if present
 # These include aasdk, aap_protobuf, and other dependencies

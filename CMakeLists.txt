@@ -251,32 +251,34 @@ install(FILES packaging/udev/99-openauto.rules
     DESTINATION /lib/udev/rules.d
 )
 
-# Install systemd service files
+# Install eglfs configuration for Qt DRM/KMS backend
+install(FILES packaging/eglfs.json
+    DESTINATION /etc
+)
+
+# Install systemd service files (btservice only - autoapp uses autologin + bash_profile)
 install(FILES 
-    packaging/systemd/openauto.service
     packaging/systemd/openauto-btservice.service
     DESTINATION /lib/systemd/system
 )
 
-# Install systemd override to disable getty on tty2 (prevents interference with linuxfb)
+# Install systemd override for autologin on tty1 (HDMI console)
+# OpenAuto starts via .bash_profile when root logs in on tty1
 install(CODE "
-    execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory \"\$ENV{DESTDIR}/etc/systemd/system/getty@tty2.service.d\")
-    file(WRITE \"\$ENV{DESTDIR}/etc/systemd/system/getty@tty2.service.d/override.conf\" \"[Service]\\nExecStart=\\nExecStart=-/sbin/agetty --autologin root --noclear %I \\$TERM\\n\")
+    execute_process(COMMAND \${CMAKE_COMMAND} -E make_directory \"\$ENV{DESTDIR}/etc/systemd/system/getty@tty1.service.d\")
+    file(WRITE \"\$ENV{DESTDIR}/etc/systemd/system/getty@tty1.service.d/override.conf\" \"[Service]\\nExecStart=\\nExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM\\n\")
 ")
+
+# Install bash_profile for OpenAuto autostart on tty1
+install(FILES packaging/bash_profile
+    DESTINATION /root
+    RENAME .bash_profile
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+)
 
 # Create /opt/openauto directory structure
 install(DIRECTORY DESTINATION /opt/openauto)
 install(DIRECTORY DESTINATION /opt/openauto/lib)
-
-# Install launcher script (openauto.sh) to /opt/openauto
-# The script is expected to be at packaging/opt/openauto/openauto.sh
-# or will be copied during the build process from /root/openauto.sh
-if(EXISTS "${CMAKE_SOURCE_DIR}/packaging/opt/openauto/openauto.sh")
-    install(FILES packaging/opt/openauto/openauto.sh
-        DESTINATION /opt/openauto
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-    )
-endif()
 
 # Install custom libraries from deps/ directory if present
 # These include aasdk, aap_protobuf, and other dependencies

@@ -50,21 +50,18 @@ void setOpenAutoEnvironmentDefaults() {
     }
   };
 
-  // LinuxFB mode (prevents DRM conflict with FFmpeg)
-  setIfUnset("QT_QPA_PLATFORM", "linuxfb");
-
-  // Explicit input device plugins (since linuxfb doesn't auto-detect well on
-  // this platform)
-  setIfUnset("QT_QPA_GENERIC_PLUGINS",
-             "evdevtouch:/dev/input/event0,evdevmouse:/dev/input/"
-             "event1,evdevkeyboard:/dev/input/event2");
+  // Qt eglfs mode for DRM/KMS (FFmpeg uses overlay plane 36)
+  setIfUnset("QT_QPA_PLATFORM", "eglfs");
+  setIfUnset("QT_QPA_EGLFS_INTEGRATION", "eglfs_kms");
+  setIfUnset("QT_QPA_EGLFS_KMS_ATOMIC", "1");
+  setIfUnset("QT_QPA_EGLFS_KMS_CONFIG", "/etc/eglfs.json");
 
   // Audio configuration for ALSA/RtAudio
   setIfUnset("ALSA_CARD", "0");
   setIfUnset("ALSA_PCM_CARD", "0");
   setIfUnset("RTAUDIO_ALSA_DEVICE", "hw:0,0");
 
-  OPENAUTO_LOG(info) << "[AutoApp] Launching OpenAuto (LinuxFB + FFmpeg)...";
+  OPENAUTO_LOG(info) << "[AutoApp] Launching OpenAuto (eglfs + FFmpeg DRM)...";
   OPENAUTO_LOG(info) << "[AutoApp] Dev: Harleythetech";
   OPENAUTO_LOG(info)
       << "[AutoApp] Git: "

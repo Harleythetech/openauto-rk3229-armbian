@@ -1,0 +1,33 @@
+#!/bin/bash
+# OpenAuto Auto-Start Profile for RK3229/Armbian
+# This file is installed to /root/.bash_profile
+# It starts OpenAuto automatically when logged in on tty1 (HDMI console)
+
+# Check if we are on the physical HDMI monitor (tty1)
+# This prevents OpenAuto from starting when you SSH in.
+if [[ "$(tty)" == "/dev/tty1" ]]; then
+
+    # 1. Cleanup before starting
+    echo "Preparing OpenAuto System..."
+    killall pulseaudio >/dev/null 2>&1
+
+    # 2. Clear screen artifacts (blinking cursor)
+    echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null
+    clear
+
+
+    # 7. The "Infinite Loop" (Reliability)
+    # This runs OpenAuto. If the app crashes/closes, it waits 2s and restarts.
+    while true; do
+
+        echo "Starting OpenAuto..."
+        
+        # Run OpenAuto with logging
+        autoapp 2>&1 | tee /tmp/openauto.log
+
+        echo ""
+        echo "OpenAuto closed. Restarting in 2 seconds..."
+        echo "Press Ctrl+C to stop loop."
+        sleep 2
+    done
+fi

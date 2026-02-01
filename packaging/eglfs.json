@@ -1,0 +1,8 @@
+{
+  "device": "/dev/dri/card0",
+  "hwcursor": true,
+  "pbuffers": true,
+  "outputs": [
+    { "name": "HDMI-A-1", "mode": "1920x1080" }
+  ]
+}
