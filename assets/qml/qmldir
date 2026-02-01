@@ -1,0 +1,3 @@
+module OpenAuto
+
+singleton Theme 1.0 Theme.qml

@@ -16,9 +16,11 @@
 *  along with openauto. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <QApplication>
-#include <QDesktopWidget>
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
 #include <QScreen>
+#include <QQuickStyle>
 #include <aasdk/TCP/TCPWrapper.hpp>
 #include <aasdk/USB/AccessoryModeQueryChain.hpp>
 #include <aasdk/USB/AccessoryModeQueryChainFactory.hpp>
@@ -33,11 +35,7 @@
 #include <f1x/openauto/autoapp/Configuration/RecentAddressesList.hpp>
 #include <f1x/openauto/autoapp/Service/AndroidAutoEntityFactory.hpp>
 #include <f1x/openauto/autoapp/Service/ServiceFactory.hpp>
-#include <f1x/openauto/autoapp/UI/ConnectDialog.hpp>
-#include <f1x/openauto/autoapp/UI/MainWindow.hpp>
-#include <f1x/openauto/autoapp/UI/SettingsWindow.hpp>
-#include <f1x/openauto/autoapp/UI/UpdateDialog.hpp>
-#include <f1x/openauto/autoapp/UI/WarningDialog.hpp>
+#include <f1x/openauto/autoapp/UI/UIBackend.hpp>
 #include <thread>
 
 namespace autoapp = f1x::openauto::autoapp;
@@ -132,6 +130,8 @@ int main(int argc, char *argv[])
   configureLogging();
   setOpenAutoEnvironmentDefaults();
 
+  OPENAUTO_LOG(info) << "[AutoApp] Starting OpenAuto with QML UI...";
+
   libusb_context *usbContext;
   if (libusb_init(&usbContext) != 0)
   {
@@ -145,31 +145,22 @@ int main(int argc, char *argv[])
   startUSBWorkers(ioService, usbContext, threadPool);
   startIOServiceWorkers(ioService, threadPool);
 
-  QApplication qApplication(argc, argv);
-  int width = QApplication::desktop()->width();
-  int height = QApplication::desktop()->height();
+  // Use QGuiApplication for QML-based UI
+  QGuiApplication qApplication(argc, argv);
 
-  for (QScreen *screen : qApplication.screens())
-  {
-    OPENAUTO_LOG(info) << "[AutoApp] Screen name: "
-                       << screen->name().toStdString();
-    OPENAUTO_LOG(info)
-        << "[AutoApp] Screen geometry: "
-        << screen->geometry().width(); // This includes position and size
-    OPENAUTO_LOG(info) << "[AutoApp] Screen physical size: "
-                       << screen->physicalSize().width(); // Size in millimeters
-  }
+  // Set Qt Quick Controls 2 style
+  QQuickStyle::setStyle("Basic");
 
   QScreen *primaryScreen = QGuiApplication::primaryScreen();
+  int width = 800;
+  int height = 480;
 
-  // Check if a primary screen was found
   if (primaryScreen)
   {
-    // Get the geometry of the primary screen
     QRect screenGeometry = primaryScreen->geometry();
     width = screenGeometry.width();
     height = screenGeometry.height();
-    OPENAUTO_LOG(info) << "[AutoApp] Using gemoetry from primary screen.";
+    OPENAUTO_LOG(info) << "[AutoApp] Using geometry from primary screen.";
   }
   else
   {
@@ -183,58 +174,7 @@ int main(int argc, char *argv[])
   auto configuration =
       std::make_shared<autoapp::configuration::Configuration>();
 
-  autoapp::ui::MainWindow mainWindow(configuration);
-  // mainWindow.setWindowFlags(Qt::WindowStaysOnTopHint);
-
-  autoapp::ui::SettingsWindow settingsWindow(configuration);
-  // settingsWindow.setWindowFlags(Qt::WindowStaysOnTopHint);
-
-  settingsWindow.setFixedSize(width, height);
-  settingsWindow.adjustSize();
-
-  autoapp::configuration::RecentAddressesList recentAddressesList(7);
-  recentAddressesList.read();
-
-  aasdk::tcp::TCPWrapper tcpWrapper;
-  autoapp::ui::ConnectDialog connectdialog(ioService, tcpWrapper,
-                                           recentAddressesList);
-  // connectdialog.setWindowFlags(Qt::WindowStaysOnTopHint);
-  connectdialog.move((width - 500) / 2, (height - 300) / 2);
-
-  autoapp::ui::WarningDialog warningdialog;
-  // warningdialog.setWindowFlags(Qt::WindowStaysOnTopHint);
-  warningdialog.move((width - 500) / 2, (height - 300) / 2);
-
-  autoapp::ui::UpdateDialog updatedialog;
-  // updatedialog.setWindowFlags(Qt::WindowStaysOnTopHint);
-  updatedialog.setFixedSize(500, 260);
-  updatedialog.move((width - 500) / 2, (height - 260) / 2);
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::exit, []()
-                   {
-    system("touch /tmp/shutdown");
-    std::exit(0); });
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::reboot, []()
-                   {
-    system("touch /tmp/reboot");
-    std::exit(0); });
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openSettings,
-                   &settingsWindow,
-                   &autoapp::ui::SettingsWindow::showFullScreen);
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openSettings,
-                   &settingsWindow, &autoapp::ui::SettingsWindow::show_tab1);
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openSettings,
-                   &settingsWindow,
-                   &autoapp::ui::SettingsWindow::loadSystemValues);
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openConnectDialog,
-                   &connectdialog, &autoapp::ui::ConnectDialog::loadClientList);
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openConnectDialog,
-                   &connectdialog, &autoapp::ui::ConnectDialog::exec);
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openUpdateDialog,
-                   &updatedialog, &autoapp::ui::UpdateDialog::updateCheck);
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openUpdateDialog,
-                   &updatedialog, &autoapp::ui::UpdateDialog::exec);
-
+  // Hide cursor if configured
   if (configuration->showCursor() == false)
   {
     qApplication.setOverrideCursor(Qt::BlankCursor);
@@ -244,87 +184,36 @@ int main(int argc, char *argv[])
     qApplication.setOverrideCursor(Qt::ArrowCursor);
   }
 
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraHide,
-                   [&qApplication]()
+  // Create UI backend for QML
+  auto uiBackend = new autoapp::ui::UIBackend(configuration);
+
+  // Create QML engine
+  QQmlApplicationEngine engine;
+
+  // Expose backend to QML
+  engine.rootContext()->setContextProperty("backend", uiBackend);
+  engine.rootContext()->setContextProperty("screenWidth", width);
+  engine.rootContext()->setContextProperty("screenHeight", height);
+
+  // Add import path for custom QML modules
+  engine.addImportPath("qrc:/qml");
+
+  // Load main QML file
+  const QUrl url("qrc:/qml/Main.qml");
+  QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &qApplication, [url](QObject *obj, const QUrl &objUrl)
                    {
-                     system("/opt/crankshaft/cameracontrol.py Background &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Background.";
-                   });
+    if (!obj && url == objUrl)
+    {
+      OPENAUTO_LOG(error) << "[AutoApp] Failed to load QML UI.";
+      QCoreApplication::exit(-1);
+    } }, Qt::QueuedConnection);
 
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraShow,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py Foreground &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Foreground.";
-                   });
+  engine.load(url);
 
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraPosYUp,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py PosYUp &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera PosY up.";
-                   });
+  OPENAUTO_LOG(info) << "[AutoApp] QML UI loaded successfully.";
 
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraPosYDown,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py PosYDown &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera PosY down.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraZoomPlus,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py ZoomPlus &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Zoom plus.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraZoomMinus,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py ZoomMinus &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Zoom minus.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraRecord,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py Record &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Record.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraStop,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py Stop &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Stop.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraSave,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/cameracontrol.py Save &");
-                     OPENAUTO_LOG(debug) << "[AutoApp] Camera Save.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::TriggerScriptNight,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/service_daynight.sh app night");
-                     OPENAUTO_LOG(debug) << "[AutoApp] MainWindow Night.";
-                   });
-
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::TriggerScriptDay,
-                   [&qApplication]()
-                   {
-                     system("/opt/crankshaft/service_daynight.sh app day");
-                     OPENAUTO_LOG(debug) << "[AutoApp] MainWindow Day.";
-                   });
-
-  mainWindow.showFullScreen();
-  mainWindow.setFixedSize(width, height);
-  mainWindow.adjustSize();
-
+  // Create USB/WiFi Android Auto infrastructure
+  aasdk::tcp::TCPWrapper tcpWrapper;
   aasdk::usb::USBWrapper usbWrapper(usbContext);
   aasdk::usb::AccessoryModeQueryFactory queryFactory(usbWrapper, ioService);
   aasdk::usb::AccessoryModeQueryChainFactory queryChainFactory(
@@ -342,80 +231,45 @@ int main(int argc, char *argv[])
       ioService, usbWrapper, tcpWrapper, androidAutoEntityFactory,
       std::move(usbHub), std::move(connectedAccessoriesEnumerator));
 
-  QObject::connect(&connectdialog,
-                   &autoapp::ui::ConnectDialog::connectionSucceed,
-                   [&app](auto socket)
-                   { app->start(std::move(socket)); });
+  // Connect UIBackend signals to Android Auto functionality
+  QObject::connect(uiBackend, &autoapp::ui::UIBackend::requestAndroidAuto,
+                   [&app](bool usb)
+                   {
+                     OPENAUTO_LOG(debug) << "[AutoApp] Triggering Android Auto start via "
+                                         << (usb ? "USB" : "WiFi");
+                     try
+                     {
+                       app->disableAutostartEntity = false;
+                       app->resume();
+                       if (usb)
+                       {
+                         app->waitForUSBDevice();
+                       }
+                     }
+                     catch (...)
+                     {
+                       OPENAUTO_LOG(error) << "[AutoApp] Exception starting Android Auto.";
+                     }
+                   });
 
-  QObject::connect(
-      &mainWindow, &autoapp::ui::MainWindow::TriggerAppStart, [&app]()
-      {
-        OPENAUTO_LOG(debug)
-            << "[AutoApp] TriggerAppStart: Manual start android auto.";
-        try {
-          app->disableAutostartEntity = false;
-          app->resume();
-          app->waitForUSBDevice();
-        } catch (...) {
-          OPENAUTO_LOG(error)
-              << "[AutoApp] TriggerAppStart: app->waitForUSBDevice();";
-        } });
+  QObject::connect(uiBackend, &autoapp::ui::UIBackend::exitRequested,
+                   [&qApplication]()
+                   {
+                     OPENAUTO_LOG(info) << "[AutoApp] Exit requested from UI.";
+                     system("touch /tmp/shutdown");
+                     qApplication.quit();
+                   });
 
-  QObject::connect(
-      &mainWindow, &autoapp::ui::MainWindow::TriggerAppStop, [&app]()
-      {
-        try {
-          if (std::ifstream("/tmp/android_device")) {
-            OPENAUTO_LOG(debug)
-                << "[AutoApp] TriggerAppStop: Manual stop usb android auto.";
-            app->disableAutostartEntity = true;
-            system("/usr/local/bin/autoapp_helper usbreset");
-            usleep(500000);
-            try {
-              app->stop();
-              // app->pause();
-            } catch (...) {
-              OPENAUTO_LOG(error) << "[AutoApp] TriggerAppStop: stop();";
-            }
-
-          } else {
-            OPENAUTO_LOG(debug)
-                << "[AutoApp] TriggerAppStop: Manual stop wifi android auto.";
-            try {
-              app->onAndroidAutoQuit();
-              // app->pause();
-            } catch (...) {
-              OPENAUTO_LOG(error) << "[Autoapp] TriggerAppStop: stop();";
-            }
-          }
-        } catch (...) {
-          OPENAUTO_LOG(error)
-              << "[AutoApp] Exception in manual stop android auto.";
-        } });
-
-  QObject::connect(
-      &mainWindow, &autoapp::ui::MainWindow::CloseAllDialogs,
-      [&settingsWindow, &connectdialog, &updatedialog, &warningdialog]()
-      {
-        settingsWindow.close();
-        connectdialog.close();
-        warningdialog.close();
-        updatedialog.close();
-        OPENAUTO_LOG(debug) << "[AutoApp] Close all possible open dialogs.";
-      });
-
-  if (configuration->hideWarning() == false)
-  {
-    warningdialog.show();
-  }
-
+  // Start waiting for USB device
   app->waitForUSBDevice();
 
   auto result = qApplication.exec();
 
+  // Cleanup
   std::for_each(threadPool.begin(), threadPool.end(),
                 std::bind(&std::thread::join, std::placeholders::_1));
 
+  delete uiBackend;
   libusb_exit(usbContext);
   return result;
 }
