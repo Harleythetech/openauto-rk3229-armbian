@@ -531,8 +531,8 @@ namespace f1x
               if (entry->d_type != DT_LNK)
                 continue;
 
-              char linkPath[256];
-              char targetPath[256];
+              char linkPath[280];
+              char targetPath[280];
               snprintf(linkPath, sizeof(linkPath), "/proc/self/fd/%s", entry->d_name);
 
               ssize_t len = readlink(linkPath, targetPath, sizeof(targetPath) - 1);

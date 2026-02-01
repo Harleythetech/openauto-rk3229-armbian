@@ -25,6 +25,7 @@
 #endif
 
 #include <atomic>
+#include <mutex>
 #include <f1x/openauto/autoapp/Projection/IAudioOutput.hpp>
 #include <f1x/openauto/autoapp/Projection/LockFreeRingBuffer.hpp>
 
