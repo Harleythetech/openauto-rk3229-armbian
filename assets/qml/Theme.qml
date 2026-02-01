@@ -68,7 +68,7 @@ QtObject {
 
     // Typography - Readex Pro variable font
     readonly property string fontFamily: "Readex Pro"
-    
+
     // Font sizes (from Figma)
     readonly property int fontSizeClock: 128       // Home clock
     readonly property int fontSizeXXLarge: 96      // Fallback large
