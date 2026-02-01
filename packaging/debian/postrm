@@ -20,11 +20,10 @@ set -e
 
 case "$1" in
     purge|remove)
-        # Disable services
+        # Disable Bluetooth service
+        # Note: Main app uses bash_profile autologin, not systemd
         if [ -x /bin/systemctl ]; then
-            /bin/systemctl stop openauto.service 2>/dev/null || true
             /bin/systemctl stop openauto-btservice.service 2>/dev/null || true
-            /bin/systemctl disable openauto.service 2>/dev/null || true
             /bin/systemctl disable openauto-btservice.service 2>/dev/null || true
         fi
 

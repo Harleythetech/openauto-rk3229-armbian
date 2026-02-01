@@ -125,7 +125,7 @@ namespace f1x
 #endif
 
           OPENAUTO_LOG(info) << "[RtAudioOutput] Sample Rate: " << sampleRate_;
-          return audioBuffer_.open(QIODevice::ReadWrite);
+          return true; // Lock-free buffer is always ready
         }
 
         void RtAudioOutput::write(aasdk::messenger::Timestamp::ValueType timestamp,
@@ -138,9 +138,9 @@ namespace f1x
             return;
           }
 
-          // Don't acquire mutex here - audioBuffer_ is thread-safe and holding the lock
-          // can cause deadlock with the audio callback
-          audioBuffer_.write(reinterpret_cast<const char *>(buffer.cdata), buffer.size);
+          // Write to lock-free ring buffer - no mutex needed
+          // Producer: main thread, Consumer: RT audio callback
+          audioBuffer_.write(buffer.cdata, buffer.size);
         }
 
         void RtAudioOutput::start()
@@ -202,7 +202,7 @@ namespace f1x
           }
 
           // Clear the audio buffer to prevent stale data on restart
-          audioBuffer_.close();
+          audioBuffer_.clear();
         }
 
         void RtAudioOutput::suspend()
@@ -263,33 +263,21 @@ namespace f1x
             return 1; // Non-zero return tells RtAudio to stop the stream
           }
 
-          try
-          {
-            std::lock_guard<decltype(self->mutex_)> lock(self->mutex_);
+          // Calculate buffer size needed
+          const auto bufferSize =
+              nBufferFrames * (self->sampleSize_ / 8) * self->channelCount_;
 
-            const auto bufferSize =
-                nBufferFrames * (self->sampleSize_ / 8) * self->channelCount_;
+          // Read from lock-free ring buffer - NO MUTEX (RT-safe)
+          size_t bytesRead = self->audioBuffer_.read(outputBuffer, bufferSize);
 
-            // Fill with silence if buffer read fails
-            qint64 bytesRead = self->audioBuffer_.read(
-                reinterpret_cast<char *>(outputBuffer), bufferSize);
-            if (bytesRead < static_cast<qint64>(bufferSize))
-            {
-              // Zero out any remaining bytes
-              memset(reinterpret_cast<char *>(outputBuffer) + bytesRead, 0,
-                     bufferSize - bytesRead);
-            }
-            return 0;
-          }
-          catch (...)
+          // Zero-fill any remaining bytes if underrun
+          if (bytesRead < bufferSize)
           {
-            // On any exception, fill with silence and continue
-            if (outputBuffer)
-            {
-              memset(outputBuffer, 0, nBufferFrames * sizeof(int16_t) * 2);
-            }
-            return 0; // Return 0 to try to keep stream alive
+            memset(static_cast<char *>(outputBuffer) + bytesRead, 0,
+                   bufferSize - bytesRead);
           }
+
+          return 0;
         }
 
       } // namespace projection

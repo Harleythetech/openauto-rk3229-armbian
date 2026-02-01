@@ -49,9 +49,8 @@ case "$1" in
             echo 0 > /sys/class/graphics/fbcon/cursor_blink || true
         fi
 
-        # Enable but don't start services (user can start manually or on next boot)
+        # Enable Bluetooth service (main app uses bash_profile autologin)
         if [ -x /bin/systemctl ]; then
-            /bin/systemctl enable openauto.service || true
             /bin/systemctl enable openauto-btservice.service || true
         fi
 
@@ -59,13 +58,14 @@ case "$1" in
         echo "OpenAuto (RK3229/Armbian) installed successfully!"
         echo ""
         echo "Configuration:"
-        echo "  - GUI: Qt linuxfb on /dev/tty2"
-        echo "  - Video: GStreamer kmssink (KMS/DRM)"
+        echo "  - GUI: Qt EGLFS on DRM/KMS"
+        echo "  - Video: FFmpeg DRM hwaccel (zero-copy)"
         echo "  - Audio: RTAudio ALSA (direct, no PulseAudio)"
         echo "  - Libraries: /opt/openauto/lib"
         echo ""
-        echo "To start OpenAuto:"
-        echo "  sudo systemctl start openauto"
+        echo "OpenAuto will start automatically on login via ~/.bash_profile"
+        echo "To start Bluetooth service manually:"
+        echo "  sudo systemctl start openauto-btservice"
         echo ""
         echo "Note: getty@tty2 has been masked to prevent interference with the GUI."
         ;;

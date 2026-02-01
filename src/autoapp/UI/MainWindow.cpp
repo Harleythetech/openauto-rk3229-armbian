@@ -644,7 +644,9 @@ namespace f1x
                     connect(watcher_tmp, &QFileSystemWatcher::directoryChanged, this, &MainWindow::tmpChanged);
 
                     // Experimental test code
-                    localDevice = new QBluetoothLocalDevice(this);
+                    // Note: localDevice was already initialized in member initializer list
+                    // Setting parent here for proper Qt ownership
+                    localDevice->setParent(this);
 
                     connect(localDevice, SIGNAL(hostModeStateChanged(QBluetoothLocalDevice::HostMode)),
                             this, SLOT(hostModeStateChanged(QBluetoothLocalDevice::HostMode)));
@@ -752,6 +754,9 @@ void f1x::openauto::autoapp::ui::MainWindow::customButtonPressed6()
 
 void f1x::openauto::autoapp::ui::MainWindow::on_pushButtonBrightness_clicked()
 {
+    // Clean up previous QFile objects to prevent memory leak
+    delete this->brightnessFile;
+    delete this->brightnessFileAlt;
     this->brightnessFile = new QFile(this->brightnessFilename);
     this->brightnessFileAlt = new QFile(this->brightnessFilenameAlt);
 
@@ -788,6 +793,9 @@ void f1x::openauto::autoapp::ui::MainWindow::on_pushButtonBrightness_clicked()
 
 void f1x::openauto::autoapp::ui::MainWindow::on_pushButtonBrightness2_clicked()
 {
+    // Clean up previous QFile objects to prevent memory leak
+    delete this->brightnessFile;
+    delete this->brightnessFileAlt;
     this->brightnessFile = new QFile(this->brightnessFilename);
     this->brightnessFileAlt = new QFile(this->brightnessFilenameAlt);
 
@@ -857,6 +865,9 @@ void f1x::openauto::autoapp::ui::MainWindow::on_pushButtonVolume2_clicked()
 void f1x::openauto::autoapp::ui::MainWindow::on_horizontalSliderBrightness_valueChanged(int value)
 {
     int n = snprintf(this->brightness_str, 5, "%d", value);
+    // Clean up previous QFile objects to prevent memory leak
+    delete this->brightnessFile;
+    delete this->brightnessFileAlt;
     this->brightnessFile = new QFile(this->brightnessFilename);
     this->brightnessFileAlt = new QFile(this->brightnessFilenameAlt);
 

@@ -20,9 +20,9 @@ set -e
 
 case "$1" in
     remove|upgrade|deconfigure)
-        # Stop services before removal/upgrade
+        # Stop Bluetooth service before removal/upgrade
+        # Note: Main app uses bash_profile autologin, not systemd
         if [ -x /bin/systemctl ]; then
-            /bin/systemctl stop openauto.service || true
             /bin/systemctl stop openauto-btservice.service || true
         fi
         ;;

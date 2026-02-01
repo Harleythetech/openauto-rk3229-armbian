@@ -16,7 +16,6 @@
 *  along with openauto. If not, see <http://www.gnu.org/licenses/>.
 */
 
-
 #include <boost/algorithm/hex.hpp>
 #include <f1x/openauto/Common/Log.hpp>
 #include <f1x/openauto/autoapp/Configuration/IConfiguration.hpp>
@@ -34,45 +33,53 @@ using namespace google::protobuf::io;
 
 // 39171FDJG002WHhandleWifiVersionRequest
 
-namespace f1x::openauto::btservice {
+namespace f1x::openauto::btservice
+{
 
   AndroidBluetoothServer::AndroidBluetoothServer(autoapp::configuration::IConfiguration::Pointer configuration)
       : rfcommServer_(std::make_unique<QBluetoothServer>(QBluetoothServiceInfo::RfcommProtocol, this)),
-        configuration_(std::move(configuration)) {
+        configuration_(std::move(configuration))
+  {
     OPENAUTO_LOG(info) << "[AndroidBluetoothServer::AndroidBluetoothServer] Initialising";
 
     connect(rfcommServer_.get(), &QBluetoothServer::newConnection, this,
             &AndroidBluetoothServer::onClientConnected);
-
   }
 
   /// Start Server listening on Address
-  uint16_t AndroidBluetoothServer::start(const QBluetoothAddress &address) {
+  uint16_t AndroidBluetoothServer::start(const QBluetoothAddress &address)
+  {
     OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::start]";
     rfcommServer_->close(); // Close should always be called before listen.
-    if (rfcommServer_->listen(address)) {
+    if (rfcommServer_->listen(address))
+    {
 
       return rfcommServer_->serverPort();
     }
     return 0;
   }
 
-  void AndroidBluetoothServer::onError(QBluetoothServer::Error error) {
+  void AndroidBluetoothServer::onError(QBluetoothServer::Error error)
+  {
     OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::onError]";
   }
 
   /// Call-Back for when Client Connected
-  void AndroidBluetoothServer::onClientConnected() {
+  void AndroidBluetoothServer::onClientConnected()
+  {
     OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::onClientConnected]";
-    if (socket != nullptr) {
+    if (socket != nullptr)
+    {
       socket->deleteLater();
+      socket = nullptr; // Prevent race condition with quick reconnects
     }
 
     socket = rfcommServer_->nextPendingConnection();
 
-    if (socket != nullptr) {
+    if (socket != nullptr)
+    {
       OPENAUTO_LOG(debug) << "[AndroidBluetoothServer] rfcomm client connected, peer name: "
-                         << socket->peerName().toStdString();
+                          << socket->peerName().toStdString();
 
       connect(socket, &QBluetoothSocket::readyRead, this, &AndroidBluetoothServer::readSocket);
 
@@ -83,18 +90,22 @@ namespace f1x::openauto::btservice {
 
       sendMessage(versionRequest, aap_protobuf::aaw::MessageId::WIFI_VERSION_REQUEST);
       sendMessage(startRequest, aap_protobuf::aaw::MessageId::WIFI_START_REQUEST);
-    } else {
+    }
+    else
+    {
       OPENAUTO_LOG(error) << "[AndroidBluetoothServer] received null socket during client connection.";
     }
   }
 
   /// Read data from Bluetooth Socket
-  void AndroidBluetoothServer::readSocket() {
+  void AndroidBluetoothServer::readSocket()
+  {
     buffer += socket->readAll();
 
     OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Reading from socket.";
 
-    if (buffer.length() < 4) {
+    if (buffer.length() < 4)
+    {
       OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Not enough data, waiting for more.";
       return;
     }
@@ -103,7 +114,8 @@ namespace f1x::openauto::btservice {
     uint16_t length;
     stream >> length;
 
-    if (buffer.length() < length + 4) {
+    if (buffer.length() < length + 4)
+    {
       OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Not enough data, waiting for more: " << buffer.length();
       return;
     }
@@ -116,41 +128,43 @@ namespace f1x::openauto::btservice {
 
     OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Message length: " << length << " MessageId: " << messageId;
 
-    switch (messageId) {
+    switch (messageId)
+    {
 
-      case aap_protobuf::aaw::MessageId::WIFI_INFO_REQUEST: // WifiInfoRequest - Respond with a WifiInfoResponse
-        handleWifiInfoRequest(buffer, length);
-        break;
-      case aap_protobuf::aaw::MessageId::WIFI_VERSION_RESPONSE: // WifiVersionRequest - Send a Version Request
-        handleWifiVersionResponse(buffer, length);// do something
-        break;
-      case aap_protobuf::aaw::MessageId::WIFI_CONNECTION_STATUS: // WifiStartResponse  - Receive a confirmation
-        handleWifiConnectionStatus(buffer, length);
-        break;
-      case aap_protobuf::aaw::MessageId::WIFI_START_RESPONSE: // WifiStartResponse  - Receive a confirmation
-        handleWifiStartResponse(buffer, length);
-        break;
-      case aap_protobuf::aaw::MessageId::WIFI_START_REQUEST:      // These are not received from the MD.
-      case aap_protobuf::aaw::MessageId::WIFI_INFO_RESPONSE:      // These are not received from the MD.
-      case aap_protobuf::aaw::MessageId::WIFI_VERSION_REQUEST:    // These are not received from the MD.
-      default:
-        QByteArray messageData = buffer.mid(stream.device()->pos(), length - 2);
+    case aap_protobuf::aaw::MessageId::WIFI_INFO_REQUEST: // WifiInfoRequest - Respond with a WifiInfoResponse
+      handleWifiInfoRequest(buffer, length);
+      break;
+    case aap_protobuf::aaw::MessageId::WIFI_VERSION_RESPONSE: // WifiVersionRequest - Send a Version Request
+      handleWifiVersionResponse(buffer, length);              // do something
+      break;
+    case aap_protobuf::aaw::MessageId::WIFI_CONNECTION_STATUS: // WifiStartResponse  - Receive a confirmation
+      handleWifiConnectionStatus(buffer, length);
+      break;
+    case aap_protobuf::aaw::MessageId::WIFI_START_RESPONSE: // WifiStartResponse  - Receive a confirmation
+      handleWifiStartResponse(buffer, length);
+      break;
+    case aap_protobuf::aaw::MessageId::WIFI_START_REQUEST:   // These are not received from the MD.
+    case aap_protobuf::aaw::MessageId::WIFI_INFO_RESPONSE:   // These are not received from the MD.
+    case aap_protobuf::aaw::MessageId::WIFI_VERSION_REQUEST: // These are not received from the MD.
+    default:
+      QByteArray messageData = buffer.mid(stream.device()->pos(), length - 2);
 
-        // Convert QByteArray to std::string
-        std::string protoData = messageData.toStdString();
+      // Convert QByteArray to std::string
+      std::string protoData = messageData.toStdString();
 
-        // Pass it to your function
-        this->DecodeProtoMessage(protoData);
+      // Pass it to your function
+      this->DecodeProtoMessage(protoData);
 
-        std::stringstream ss;
-        ss << std::hex << std::setfill('0');
-        for (auto &&val: buffer) {
-          ss << std::setw(2) << static_cast<unsigned>(val);
-        }
-        OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Unknown message: " << messageId;
-        OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Data " << ss.str();
+      std::stringstream ss;
+      ss << std::hex << std::setfill('0');
+      for (auto &&val : buffer)
+      {
+        ss << std::setw(2) << static_cast<unsigned>(val);
+      }
+      OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Unknown message: " << messageId;
+      OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::readSocket] Data " << ss.str();
 
-        break;
+      break;
     }
 
     buffer = buffer.mid(length + 4);
@@ -159,7 +173,8 @@ namespace f1x::openauto::btservice {
   /// Handles request for WifiInfoRequest by sending a WifiInfoResponse
   /// \param buffer
   /// \param length
-  void AndroidBluetoothServer::handleWifiInfoRequest(QByteArray &buffer, uint16_t length) {
+  void AndroidBluetoothServer::handleWifiInfoRequest(QByteArray &buffer, uint16_t length)
+  {
     OPENAUTO_LOG(info) << "[AndroidBluetoothServer::handleWifiInfoRequest] Handling wifi info request";
 
     aap_protobuf::aaw::WifiInfoResponse response;
@@ -179,7 +194,8 @@ namespace f1x::openauto::btservice {
   /// Listens for a WifiVersionResponse from the MD - usually just a notification
   /// \param buffer
   /// \param length
-  void AndroidBluetoothServer::handleWifiVersionResponse(QByteArray &buffer, uint16_t length) {
+  void AndroidBluetoothServer::handleWifiVersionResponse(QByteArray &buffer, uint16_t length)
+  {
     OPENAUTO_LOG(info) << "[AndroidBluetoothServer::handleWifiVersionResponse] Handling wifi version response";
 
     aap_protobuf::aaw::WifiVersionResponse response;
@@ -190,7 +206,8 @@ namespace f1x::openauto::btservice {
   /// Listens for WifiStartResponse from MD - usually just a notification with a status
   /// \param buffer
   /// \param length
-  void AndroidBluetoothServer::handleWifiStartResponse(QByteArray &buffer, uint16_t length) {
+  void AndroidBluetoothServer::handleWifiStartResponse(QByteArray &buffer, uint16_t length)
+  {
     OPENAUTO_LOG(info) << "[AndroidBluetoothServer::handleWifiStartResponse] Handling wifi start response";
 
     aap_protobuf::aaw::WifiStartResponse response;
@@ -201,40 +218,48 @@ namespace f1x::openauto::btservice {
   /// Handles request for WifiStartRequest by sending a WifiStartResponse
   /// \param buffer
   /// \param length
-  void AndroidBluetoothServer::handleWifiConnectionStatus(QByteArray &buffer, uint16_t length) {
+  void AndroidBluetoothServer::handleWifiConnectionStatus(QByteArray &buffer, uint16_t length)
+  {
     aap_protobuf::aaw::WifiConnectionStatus status;
     status.ParseFromArray(buffer.data() + 4, length);
     OPENAUTO_LOG(info) << "[AndroidBluetoothServer::handleWifiConnectionStatus] Handle wifi connection status, received: " << Status_Name(status.status());
   }
 
-  void AndroidBluetoothServer::sendMessage(const google::protobuf::Message &message, uint16_t type) {
+  void AndroidBluetoothServer::sendMessage(const google::protobuf::Message &message, uint16_t type)
+  {
     OPENAUTO_LOG(info) << "[AndroidBluetoothServer::sendMessage] Sending message to connected device";
 
     int byteSize = message.ByteSizeLong();
     QByteArray out(byteSize + 4, 0);
     QDataStream ds(&out, QIODevice::ReadWrite);
-    ds << (uint16_t) byteSize;
+    ds << (uint16_t)byteSize;
     ds << type;
     message.SerializeToArray(out.data() + 4, byteSize);
 
     std::stringstream ss;
     ss << std::hex << std::setfill('0');
-    for (auto &&val: out) {
+    for (auto &&val : out)
+    {
       ss << std::setw(2) << static_cast<unsigned>(val);
     }
 
     OPENAUTO_LOG(debug) << message.GetTypeName() << " - " + message.DebugString();
 
     auto written = socket->write(out);
-    if (written > -1) {
+    if (written > -1)
+    {
       OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::sendMessage] Bytes written: " << written;
-    } else {
+    }
+    else
+    {
       OPENAUTO_LOG(debug) << "[AndroidBluetoothServer::sendMessage] Could not write data";
     }
   }
 
-  const ::std::string AndroidBluetoothServer::getIP4_(const QString intf) {
-    for (const QNetworkAddressEntry &address: QNetworkInterface::interfaceFromName(intf).addressEntries()) {
+  const ::std::string AndroidBluetoothServer::getIP4_(const QString intf)
+  {
+    for (const QNetworkAddressEntry &address : QNetworkInterface::interfaceFromName(intf).addressEntries())
+    {
       if (address.ip().protocol() == QAbstractSocket::IPv4Protocol)
         return address.ip().toString().toStdString();
     }
@@ -243,7 +268,8 @@ namespace f1x::openauto::btservice {
 
   /// Decode Proto Messages to their constituent components
   /// \param proto_data
-  void AndroidBluetoothServer::DecodeProtoMessage(const std::string& proto_data) {
+  void AndroidBluetoothServer::DecodeProtoMessage(const std::string &proto_data)
+  {
     UnknownFieldSet set;
 
     // Create streams
@@ -251,34 +277,38 @@ namespace f1x::openauto::btservice {
     CodedInputStream input(&raw_input);
 
     // Decode the message
-    if (!set.MergeFromCodedStream(&input)) {
+    if (!set.MergeFromCodedStream(&input))
+    {
       std::cerr << "Failed to decode the message." << std::endl;
       return;
     }
 
     // Iterate over the fields
-    for (int i = 0; i < set.field_count(); ++i) {
-      const UnknownField& field = set.field(i);
-      switch (field.type()) {
-        case UnknownField::TYPE_VARINT:
-          std::cout << "Field number " << field.number() << " is a varint: " << field.varint() << std::endl;
-          break;
-        case UnknownField::TYPE_FIXED32:
-          std::cout << "Field number " << field.number() << " is a fixed32: " << field.fixed32() << std::endl;
-          break;
-        case UnknownField::TYPE_FIXED64:
-          std::cout << "Field number " << field.number() << " is a fixed64: " << field.fixed64() << std::endl;
-          break;
-        case UnknownField::TYPE_LENGTH_DELIMITED:
-          std::cout << "Field number " << field.number() << " is length-delimited: ";
-          for (char ch : field.length_delimited()) {
-            std::cout << std::hex << (int)(unsigned char)ch;
-          }
-          std::cout << std::dec << std::endl;
-          break;
-        case UnknownField::TYPE_GROUP:  // Deprecated in modern Protobuf
-          std::cout << "Field number " << field.number() << " is a group." << std::endl;
-          break;
+    for (int i = 0; i < set.field_count(); ++i)
+    {
+      const UnknownField &field = set.field(i);
+      switch (field.type())
+      {
+      case UnknownField::TYPE_VARINT:
+        std::cout << "Field number " << field.number() << " is a varint: " << field.varint() << std::endl;
+        break;
+      case UnknownField::TYPE_FIXED32:
+        std::cout << "Field number " << field.number() << " is a fixed32: " << field.fixed32() << std::endl;
+        break;
+      case UnknownField::TYPE_FIXED64:
+        std::cout << "Field number " << field.number() << " is a fixed64: " << field.fixed64() << std::endl;
+        break;
+      case UnknownField::TYPE_LENGTH_DELIMITED:
+        std::cout << "Field number " << field.number() << " is length-delimited: ";
+        for (char ch : field.length_delimited())
+        {
+          std::cout << std::hex << (int)(unsigned char)ch;
+        }
+        std::cout << std::dec << std::endl;
+        break;
+      case UnknownField::TYPE_GROUP: // Deprecated in modern Protobuf
+        std::cout << "Field number " << field.number() << " is a group." << std::endl;
+        break;
       }
     }
   }

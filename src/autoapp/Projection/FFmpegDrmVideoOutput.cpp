@@ -118,8 +118,8 @@ namespace f1x
         // ============================================================================
         // Signal Handler for Clean Shutdown
         // ============================================================================
-        // Static instance pointer for signal handler access
-        static FFmpegDrmVideoOutput *g_instance = nullptr;
+        // Atomic instance pointer for signal handler access (thread-safe)
+        static std::atomic<FFmpegDrmVideoOutput *> g_instance{nullptr};
         static std::atomic<bool> g_signalReceived{false};
 
         static void signalHandler(int signum)
@@ -134,11 +134,12 @@ namespace f1x
               << "[FFmpegDrmVideoOutput] Received signal " << signum
               << ", performing emergency cleanup to prevent CMA leaks";
 
-          if (g_instance)
+          FFmpegDrmVideoOutput *instance = g_instance.load(std::memory_order_acquire);
+          if (instance)
           {
             // Perform emergency cleanup of DRM resources
             // This prevents CMA memory leaks during phone replugs
-            g_instance->emergencyCleanup();
+            instance->emergencyCleanup();
           }
 
           // Re-raise signal for default handling (process termination)
@@ -186,7 +187,7 @@ namespace f1x
         // Static member definitions for DRM cursor (plane-based, not legacy cursor API)
         int *FFmpegDrmVideoOutput::cursorDrmFdPtr_ = nullptr;
         uint32_t FFmpegDrmVideoOutput::cursorCrtcId_ = 0;
-        uint32_t FFmpegDrmVideoOutput::cursorPlaneId_ = 41; // RK3229 cursor plane
+        uint32_t FFmpegDrmVideoOutput::cursorPlaneId_ = 0; // Set dynamically during init
         uint32_t FFmpegDrmVideoOutput::cursorBufferHandle_ = 0;
         uint32_t FFmpegDrmVideoOutput::cursorFbId_ = 0;
         int FFmpegDrmVideoOutput::cursorX_ = 0;
@@ -222,7 +223,7 @@ namespace f1x
 
           // Install signal handlers for clean shutdown
           // This prevents CMA memory leaks during phone replugs
-          g_instance = this;
+          g_instance.store(this, std::memory_order_release);
           g_signalReceived.store(false);
           signal(SIGINT, signalHandler);
           signal(SIGTERM, signalHandler);
@@ -244,7 +245,7 @@ namespace f1x
           // Uninstall signal handlers
           signal(SIGINT, SIG_DFL);
           signal(SIGTERM, SIG_DFL);
-          g_instance = nullptr;
+          g_instance.store(nullptr, std::memory_order_release);
 
           stop();
         }
@@ -684,18 +685,122 @@ namespace f1x
 
           OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using CRTC: " << crtcId_;
 
-          // RK3229 plane layout (from modetest):
-          //   Plane 31 = Primary (Qt EGLFS uses this for UI)
-          //   Plane 36 = Overlay (FFmpeg uses this for video)
-          //   Plane 41 = Cursor
-          // Use overlay plane 36 for video - Qt keeps primary plane 31
-          // Overlay renders ON TOP of primary, so video appears over Qt UI
-          planeId_ = 36;
-          OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using overlay plane: " << planeId_
-                             << " (Qt uses primary 31)";
-
           drmModeFreeConnector(connector);
           drmModeFreeResources(resources);
+
+          // ================================================================
+          // Dynamic Plane Enumeration
+          // ================================================================
+          // Enumerate available DRM planes and find:
+          // - Overlay plane for video (preferred) or Primary as fallback
+          // - Cursor plane for hardware cursor
+          // This replaces hardcoded plane IDs for portability across devices
+
+          uint32_t foundOverlayPlane = 0;
+          uint32_t foundPrimaryPlane = 0;
+          uint32_t foundCursorPlane = 0;
+
+          drmModePlaneResPtr planeRes = drmModeGetPlaneResources(drmFd_);
+          if (planeRes)
+          {
+            OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Enumerating " << planeRes->count_planes << " DRM planes";
+
+            for (uint32_t i = 0; i < planeRes->count_planes; i++)
+            {
+              drmModePlanePtr plane = drmModeGetPlane(drmFd_, planeRes->planes[i]);
+              if (!plane)
+                continue;
+
+              // Check if this plane can be used with our CRTC
+              if (!(plane->possible_crtcs & (1 << 0))) // Assuming CRTC index 0
+              {
+                drmModeFreePlane(plane);
+                continue;
+              }
+
+              // Get the plane type property
+              drmModeObjectPropertiesPtr props =
+                  drmModeObjectGetProperties(drmFd_, plane->plane_id, DRM_MODE_OBJECT_PLANE);
+              if (props)
+              {
+                for (uint32_t j = 0; j < props->count_props; j++)
+                {
+                  drmModePropertyPtr prop = drmModeGetProperty(drmFd_, props->props[j]);
+                  if (prop && strcmp(prop->name, "type") == 0)
+                  {
+                    uint64_t planeType = props->prop_values[j];
+                    // DRM_PLANE_TYPE_OVERLAY = 0
+                    // DRM_PLANE_TYPE_PRIMARY = 1
+                    // DRM_PLANE_TYPE_CURSOR = 2
+                    const char *typeName = "Unknown";
+                    if (planeType == 0)
+                    {
+                      typeName = "Overlay";
+                      if (foundOverlayPlane == 0)
+                        foundOverlayPlane = plane->plane_id;
+                    }
+                    else if (planeType == 1)
+                    {
+                      typeName = "Primary";
+                      if (foundPrimaryPlane == 0)
+                        foundPrimaryPlane = plane->plane_id;
+                    }
+                    else if (planeType == 2)
+                    {
+                      typeName = "Cursor";
+                      if (foundCursorPlane == 0)
+                        foundCursorPlane = plane->plane_id;
+                    }
+
+                    OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Plane " << plane->plane_id
+                                       << " type: " << typeName << " (" << planeType << ")";
+                    drmModeFreeProperty(prop);
+                    break;
+                  }
+                  if (prop)
+                    drmModeFreeProperty(prop);
+                }
+                drmModeFreeObjectProperties(props);
+              }
+
+              drmModeFreePlane(plane);
+            }
+
+            drmModeFreePlaneResources(planeRes);
+          }
+          else
+          {
+            OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Could not enumerate planes";
+          }
+
+          // Select video plane: prefer overlay, fallback to primary
+          if (foundOverlayPlane != 0)
+          {
+            planeId_ = foundOverlayPlane;
+            OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using Overlay plane " << planeId_ << " for video";
+          }
+          else if (foundPrimaryPlane != 0)
+          {
+            planeId_ = foundPrimaryPlane;
+            OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using Primary plane " << planeId_ << " for video (no overlay available)";
+          }
+          else
+          {
+            OPENAUTO_LOG(error) << "[FFmpegDrmVideoOutput] No suitable plane found for video";
+            return false;
+          }
+
+          // Set cursor plane (static member for cursor API)
+          if (foundCursorPlane != 0)
+          {
+            cursorPlaneId_ = foundCursorPlane;
+            OPENAUTO_LOG(info) << "[FFmpegDrmVideoOutput] Using Cursor plane " << cursorPlaneId_;
+          }
+          else
+          {
+            OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] No cursor plane found, hardware cursor disabled";
+            cursorPlaneId_ = 0;
+          }
 
           // Setup BT.709 color encoding on the plane to prevent purple/green tint
           setupColorEncoding();
