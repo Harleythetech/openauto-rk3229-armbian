@@ -1491,6 +1491,22 @@ namespace f1x
 
         void FFmpegDrmVideoOutput::cleanupDrm()
         {
+          // First, disable the overlay plane to avoid atomic errors when Qt resumes
+          if (drmFd_ >= 0 && planeId_ != 0 && crtcId_ != 0)
+          {
+            // Disable the plane by setting FB_ID to 0
+            int ret = drmModeSetPlane(drmFd_, planeId_, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0);
+            if (ret == 0)
+            {
+              OPENAUTO_LOG(debug) << "[FFmpegDrmVideoOutput] Disabled overlay plane " << planeId_;
+            }
+            else
+            {
+              OPENAUTO_LOG(warning) << "[FFmpegDrmVideoOutput] Failed to disable plane: " << strerror(-ret);
+            }
+          }
+
           // Clean up software fallback dumb buffer
           if (swDumbFbId_ != 0)
           {
