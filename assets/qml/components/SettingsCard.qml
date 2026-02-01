@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQuick.Layouts 1.15
 import ".."
 
 // SettingsCard - Expandable card for settings category
@@ -33,13 +34,14 @@ Rectangle {
                 onClicked: root.expanded = !root.expanded
             }
 
-            Row {
+            RowLayout {
                 anchors.fill: parent
                 anchors.margins: Theme.spacing
                 spacing: Theme.spacing
 
                 Column {
-                    anchors.verticalCenter: parent.verticalCenter
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
 
                     Text {
                         text: root.title
@@ -58,11 +60,9 @@ Rectangle {
                     }
                 }
 
-                Item { width: 1; Layout.fillWidth: true }
-
                 // Expand indicator
                 Text {
-                    anchors.verticalCenter: parent.verticalCenter
+                    Layout.alignment: Qt.AlignVCenter
                     text: root.expanded ? "▲" : "▼"
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textSecondary

@@ -58,7 +58,8 @@ sudo apt install -y \
     qml-module-qtquick2 \
     qml-module-qtquick-controls2 \
     qml-module-qtquick-window2 \
-    qml-module-qtquick-layouts
+    qml-module-qtquick-layouts \
+    qml-module-qtgraphicaleffects
 
 # FFmpeg development libraries (for video decoding)
 sudo apt install -y \
