@@ -43,9 +43,12 @@
 namespace autoapp = f1x::openauto::autoapp;
 using ThreadPool = std::vector<std::thread>;
 
-void setOpenAutoEnvironmentDefaults() {
-  auto setIfUnset = [](const char *name, const char *value) {
-    if (!qEnvironmentVariableIsSet(name)) {
+void setOpenAutoEnvironmentDefaults()
+{
+  auto setIfUnset = [](const char *name, const char *value)
+  {
+    if (!qEnvironmentVariableIsSet(name))
+    {
       qputenv(name, value);
     }
   };
@@ -69,11 +72,14 @@ void setOpenAutoEnvironmentDefaults() {
 }
 
 void startUSBWorkers(boost::asio::io_service &ioService,
-                     libusb_context *usbContext, ThreadPool &threadPool) {
-  auto usbWorker = [&ioService, usbContext]() {
+                     libusb_context *usbContext, ThreadPool &threadPool)
+{
+  auto usbWorker = [&ioService, usbContext]()
+  {
     timeval libusbEventTimeout{180, 0};
 
-    while (!ioService.stopped()) {
+    while (!ioService.stopped())
+    {
       libusb_handle_events_timeout_completed(usbContext, &libusbEventTimeout,
                                              nullptr);
     }
@@ -86,8 +92,10 @@ void startUSBWorkers(boost::asio::io_service &ioService,
 }
 
 void startIOServiceWorkers(boost::asio::io_service &ioService,
-                           ThreadPool &threadPool) {
-  auto ioServiceWorker = [&ioService]() { ioService.run(); };
+                           ThreadPool &threadPool)
+{
+  auto ioServiceWorker = [&ioService]()
+  { ioService.run(); };
 
   threadPool.emplace_back(ioServiceWorker);
   threadPool.emplace_back(ioServiceWorker);
@@ -95,11 +103,14 @@ void startIOServiceWorkers(boost::asio::io_service &ioService,
   threadPool.emplace_back(ioServiceWorker);
 }
 
-void configureLogging() {
+void configureLogging()
+{
   const std::string logIni = "openauto-logs.ini";
   std::ifstream logSettings(logIni);
-  if (logSettings.good()) {
-    try {
+  if (logSettings.good())
+  {
+    try
+    {
       // For boost < 1.71 the severity types are not automatically parsed so
       // lets register them.
       boost::log::register_simple_filter_factory<
@@ -107,19 +118,23 @@ void configureLogging() {
       boost::log::register_simple_formatter_factory<
           boost::log::trivial::severity_level, char>("Severity");
       boost::log::init_from_stream(logSettings);
-    } catch (std::exception const &e) {
+    }
+    catch (std::exception const &e)
+    {
       OPENAUTO_LOG(warning)
           << "[OpenAuto] " << logIni << " was provided but was not valid.";
     }
   }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   configureLogging();
   setOpenAutoEnvironmentDefaults();
 
   libusb_context *usbContext;
-  if (libusb_init(&usbContext) != 0) {
+  if (libusb_init(&usbContext) != 0)
+  {
     OPENAUTO_LOG(error) << "[AutoApp] libusb_init failed.";
     return 1;
   }
@@ -134,7 +149,8 @@ int main(int argc, char *argv[]) {
   int width = QApplication::desktop()->width();
   int height = QApplication::desktop()->height();
 
-  for (QScreen *screen : qApplication.screens()) {
+  for (QScreen *screen : qApplication.screens())
+  {
     OPENAUTO_LOG(info) << "[AutoApp] Screen name: "
                        << screen->name().toStdString();
     OPENAUTO_LOG(info)
@@ -147,13 +163,16 @@ int main(int argc, char *argv[]) {
   QScreen *primaryScreen = QGuiApplication::primaryScreen();
 
   // Check if a primary screen was found
-  if (primaryScreen) {
+  if (primaryScreen)
+  {
     // Get the geometry of the primary screen
     QRect screenGeometry = primaryScreen->geometry();
     width = screenGeometry.width();
     height = screenGeometry.height();
     OPENAUTO_LOG(info) << "[AutoApp] Using gemoetry from primary screen.";
-  } else {
+  }
+  else
+  {
     OPENAUTO_LOG(info)
         << "[AutoApp] Unable to find primary screen, using default values.";
   }
@@ -191,14 +210,14 @@ int main(int argc, char *argv[]) {
   updatedialog.setFixedSize(500, 260);
   updatedialog.move((width - 500) / 2, (height - 260) / 2);
 
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::exit, []() {
+  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::exit, []()
+                   {
     system("touch /tmp/shutdown");
-    std::exit(0);
-  });
-  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::reboot, []() {
+    std::exit(0); });
+  QObject::connect(&mainWindow, &autoapp::ui::MainWindow::reboot, []()
+                   {
     system("touch /tmp/reboot");
-    std::exit(0);
-  });
+    std::exit(0); });
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openSettings,
                    &settingsWindow,
                    &autoapp::ui::SettingsWindow::showFullScreen);
@@ -216,74 +235,88 @@ int main(int argc, char *argv[]) {
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::openUpdateDialog,
                    &updatedialog, &autoapp::ui::UpdateDialog::exec);
 
-  if (configuration->showCursor() == false) {
+  if (configuration->showCursor() == false)
+  {
     qApplication.setOverrideCursor(Qt::BlankCursor);
-  } else {
+  }
+  else
+  {
     qApplication.setOverrideCursor(Qt::ArrowCursor);
   }
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraHide,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py Background &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Background.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraShow,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py Foreground &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Foreground.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraPosYUp,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py PosYUp &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera PosY up.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraPosYDown,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py PosYDown &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera PosY down.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraZoomPlus,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py ZoomPlus &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Zoom plus.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraZoomMinus,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py ZoomMinus &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Zoom minus.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraRecord,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py Record &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Record.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraStop,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py Stop &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Stop.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::cameraSave,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/cameracontrol.py Save &");
                      OPENAUTO_LOG(debug) << "[AutoApp] Camera Save.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::TriggerScriptNight,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/service_daynight.sh app night");
                      OPENAUTO_LOG(debug) << "[AutoApp] MainWindow Night.";
                    });
 
   QObject::connect(&mainWindow, &autoapp::ui::MainWindow::TriggerScriptDay,
-                   [&qApplication]() {
+                   [&qApplication]()
+                   {
                      system("/opt/crankshaft/service_daynight.sh app day");
                      OPENAUTO_LOG(debug) << "[AutoApp] MainWindow Day.";
                    });
@@ -311,10 +344,12 @@ int main(int argc, char *argv[]) {
 
   QObject::connect(&connectdialog,
                    &autoapp::ui::ConnectDialog::connectionSucceed,
-                   [&app](auto socket) { app->start(std::move(socket)); });
+                   [&app](auto socket)
+                   { app->start(std::move(socket)); });
 
   QObject::connect(
-      &mainWindow, &autoapp::ui::MainWindow::TriggerAppStart, [&app]() {
+      &mainWindow, &autoapp::ui::MainWindow::TriggerAppStart, [&app]()
+      {
         OPENAUTO_LOG(debug)
             << "[AutoApp] TriggerAppStart: Manual start android auto.";
         try {
@@ -324,11 +359,11 @@ int main(int argc, char *argv[]) {
         } catch (...) {
           OPENAUTO_LOG(error)
               << "[AutoApp] TriggerAppStart: app->waitForUSBDevice();";
-        }
-      });
+        } });
 
   QObject::connect(
-      &mainWindow, &autoapp::ui::MainWindow::TriggerAppStop, [&app]() {
+      &mainWindow, &autoapp::ui::MainWindow::TriggerAppStop, [&app]()
+      {
         try {
           if (std::ifstream("/tmp/android_device")) {
             OPENAUTO_LOG(debug)
@@ -356,12 +391,12 @@ int main(int argc, char *argv[]) {
         } catch (...) {
           OPENAUTO_LOG(error)
               << "[AutoApp] Exception in manual stop android auto.";
-        }
-      });
+        } });
 
   QObject::connect(
       &mainWindow, &autoapp::ui::MainWindow::CloseAllDialogs,
-      [&settingsWindow, &connectdialog, &updatedialog, &warningdialog]() {
+      [&settingsWindow, &connectdialog, &updatedialog, &warningdialog]()
+      {
         settingsWindow.close();
         connectdialog.close();
         warningdialog.close();
@@ -369,7 +404,8 @@ int main(int argc, char *argv[]) {
         OPENAUTO_LOG(debug) << "[AutoApp] Close all possible open dialogs.";
       });
 
-  if (configuration->hideWarning() == false) {
+  if (configuration->hideWarning() == false)
+  {
     warningdialog.show();
   }
 
