@@ -45,6 +45,8 @@ namespace f1x
 
                     // Read-only status properties
                     Q_PROPERTY(QString currentTime READ currentTime NOTIFY currentTimeChanged)
+                    Q_PROPERTY(QString currentDate READ currentDate NOTIFY currentTimeChanged)
+                    Q_PROPERTY(QString amPm READ amPm NOTIFY currentTimeChanged)
                     Q_PROPERTY(QString networkSSID READ networkSSID NOTIFY networkChanged)
                     Q_PROPERTY(bool bluetoothConnected READ bluetoothConnected NOTIFY bluetoothChanged)
                     Q_PROPERTY(bool wifiConnected READ wifiConnected NOTIFY networkChanged)
@@ -62,6 +64,8 @@ namespace f1x
 
                     // Property getters
                     QString currentTime() const;
+                    QString currentDate() const;
+                    QString amPm() const;
                     QString networkSSID() const;
                     bool bluetoothConnected() const;
                     bool wifiConnected() const;

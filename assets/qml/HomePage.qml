@@ -3,106 +3,85 @@ import QtQuick.Layouts 1.15
 import "."
 import "components"
 
-// HomePage - Main menu with large tile buttons
-// Automotive HMI style grid layout for touch interaction
+// HomePage - Main screen with large centered clock and date
+// Matches original OpenAuto UI design
 
 Item {
     id: root
 
-    // Grid of main action buttons
-    GridLayout {
+    // Gradient background
+    Rectangle {
+        anchors.fill: parent
+        gradient: Gradient {
+            GradientStop {
+                position: 0.0
+                color: Theme.gradientTop
+            }
+            GradientStop {
+                position: 1.0
+                color: Theme.gradientBottom
+            }
+        }
+    }
+
+    // Centered clock + date
+    Column {
         anchors.centerIn: parent
-        columns: 3
-        rowSpacing: Theme.spacingLarge
-        columnSpacing: Theme.spacingLarge
+        spacing: 8
 
-        // Android Auto USB
-        TileButton {
-            label: "Android Auto"
-            buttonColor: Theme.buttonAndroidAuto
-            Layout.preferredWidth: 180
-            Layout.preferredHeight: 160
-            onClicked: {
-                if (typeof backend !== "undefined") {
-                    backend.startAndroidAutoUSB()
-                }
+        // Time display with AM/PM
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 4
+
+            Text {
+                text: typeof backend !== "undefined" ? backend.currentTime : "00:00"
+                font.pixelSize: Theme.fontSizeClock
+                font.family: Theme.fontFamily
+                font.weight: Font.Bold
+                color: Theme.textPrimary
+            }
+
+            Text {
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 24
+                text: typeof backend !== "undefined" ? backend.amPm : "AM"
+                font.pixelSize: Theme.fontSizeXLarge
+                font.family: Theme.fontFamily
+                font.weight: Font.Bold
+                color: Theme.textPrimary
             }
         }
 
-        // Android Auto WiFi
-        TileButton {
-            label: "AA Wireless"
-            buttonColor: Theme.buttonWifi
-            Layout.preferredWidth: 180
-            Layout.preferredHeight: 160
-            onClicked: {
-                if (typeof backend !== "undefined") {
-                    backend.startAndroidAutoWiFi()
-                }
-            }
-        }
-
-        // Settings
-        TileButton {
-            label: "Settings"
-            buttonColor: Theme.buttonSettings
-            Layout.preferredWidth: 180
-            Layout.preferredHeight: 160
-            onClicked: {
-                if (typeof backend !== "undefined") {
-                    backend.openSettings()
-                }
-            }
-        }
-
-        // Day/Night Mode
-        TileButton {
-            label: "Day/Night"
-            buttonColor: Theme.buttonDayNight
-            Layout.preferredWidth: 180
-            Layout.preferredHeight: 160
-            onClicked: {
-                if (typeof backend !== "undefined") {
-                    backend.toggleDayNight()
-                }
-            }
-        }
-
-        // Media Player
-        TileButton {
-            label: "Media"
-            buttonColor: Theme.buttonMedia
-            Layout.preferredWidth: 180
-            Layout.preferredHeight: 160
-            onClicked: {
-                if (typeof backend !== "undefined") {
-                    backend.openMediaPlayer()
-                }
-            }
-        }
-
-        // Exit / Power
-        TileButton {
-            label: "Exit"
-            buttonColor: Theme.buttonExit
-            Layout.preferredWidth: 180
-            Layout.preferredHeight: 160
-            onClicked: {
-                if (typeof backend !== "undefined") {
-                    backend.exitApp()
-                }
-            }
+        // Date display
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: typeof backend !== "undefined" ? backend.currentDate : "January 1, 2026"
+            font.pixelSize: Theme.fontSizeXLarge
+            font.family: Theme.fontFamily
+            font.weight: Font.Light
+            color: Theme.textPrimary
         }
     }
 
-    // Version info at bottom
+    // Right navigation arrow - goes to music player
     Text {
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottomMargin: Theme.spacing
-        text: typeof backend !== "undefined" ? backend.versionString : "OpenAuto"
-        font.pixelSize: Theme.fontSizeSmall
-        font.family: Theme.fontFamily
-        color: Theme.textSecondary
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.rightMargin: 32
+        text: "›"
+        font.pixelSize: 72
+        font.weight: Font.Light
+        color: Theme.textPrimary
+        opacity: 0.7
+
+        MouseArea {
+            anchors.fill: parent
+            anchors.margins: -20
+            onClicked: navigateMusic()
+        }
     }
+
+    signal navigateSettings
+    signal navigateMusic
 }

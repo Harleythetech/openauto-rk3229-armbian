@@ -5,7 +5,7 @@ import "."
 import "components"
 
 // Main.qml - Root application window
-// Automotive HMI with status bar and content area
+// Fullscreen layout with bottom dock navigation
 
 ApplicationWindow {
     id: mainWindow
@@ -13,30 +13,23 @@ ApplicationWindow {
     visible: true
     visibility: Window.FullScreen
     title: "OpenAuto"
-    color: Theme.backgroundColor
+    color: Theme.gradientTop
+
+    // Load Readex Pro font
+    FontLoader {
+        id: readexProFont
+        source: "qrc:/ReadexPro-VariableFont_HEXP,wght.ttf"
+    }
 
     // No animations - instant transitions for low-end hardware
-    // StackView transitions disabled
 
-    // Status bar at top
-    StatusBar {
-        id: statusBar
+    // Main content area (above dock)
+    StackView {
+        id: stackView
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        currentTime: typeof backend !== "undefined" ? backend.currentTime : "00:00"
-        networkSSID: typeof backend !== "undefined" ? backend.networkSSID : ""
-        bluetoothConnected: typeof backend !== "undefined" ? backend.bluetoothConnected : false
-        wifiConnected: typeof backend !== "undefined" ? backend.wifiConnected : false
-    }
-
-    // Main content area
-    StackView {
-        id: stackView
-        anchors.top: statusBar.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: bottomDock.top
 
         // Disable all animations for performance
         pushEnter: null
@@ -49,10 +42,37 @@ ApplicationWindow {
         initialItem: homePageComponent
     }
 
+    // Bottom navigation dock
+    BottomDock {
+        id: bottomDock
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: Theme.dockHeight
+
+        onHomeClicked: showHomePage()
+        onMusicClicked: showMusicPage()
+        onAndroidAutoClicked: {
+            if (typeof backend !== "undefined")
+                backend.startAndroidAutoUSB();
+        }
+        onVolumeClicked: { /* Future: volume popup */ }
+        onSettingsClicked: showSettingsPage()
+    }
+
     // Home page component
     Component {
         id: homePageComponent
-        HomePage {}
+        HomePage {
+            onNavigateSettings: showSettingsPage()
+            onNavigateMusic: showMusicPage()
+        }
+    }
+
+    // Music player page component
+    Component {
+        id: musicPageComponent
+        MusicPage {}
     }
 
     // Settings page component (loaded on demand)
@@ -63,16 +83,24 @@ ApplicationWindow {
 
     // Functions for navigation (called from backend)
     function showHomePage() {
-        stackView.replace(homePageComponent)
+        if (stackView.depth > 1) {
+            stackView.pop(null); // Pop to root
+        } else {
+            stackView.replace(homePageComponent);
+        }
     }
 
     function showSettingsPage() {
-        stackView.push(settingsPageComponent)
+        stackView.push(settingsPageComponent);
+    }
+
+    function showMusicPage() {
+        stackView.push(musicPageComponent);
     }
 
     function goBack() {
         if (stackView.depth > 1) {
-            stackView.pop()
+            stackView.pop();
         }
     }
 
@@ -81,37 +109,37 @@ ApplicationWindow {
         target: typeof backend !== "undefined" ? backend : null
 
         function onShowSettings() {
-            showSettingsPage()
+            showSettingsPage();
         }
 
         function onShowHome() {
-            showHomePage()
+            showHomePage();
         }
 
         function onAndroidAutoStarted() {
             // Hide QML UI when Android Auto projection starts
-            mainWindow.visible = false
+            mainWindow.visible = false;
         }
 
         function onAndroidAutoStopped() {
             // Show QML UI when Android Auto projection ends
-            mainWindow.visible = true
-            showHomePage()
+            mainWindow.visible = true;
+            showHomePage();
         }
     }
 
     // Keyboard handling for back navigation
     Keys.onBackPressed: {
         if (stackView.depth > 1) {
-            stackView.pop()
-            event.accepted = true
+            stackView.pop();
+            event.accepted = true;
         }
     }
 
     Keys.onEscapePressed: {
         if (stackView.depth > 1) {
-            stackView.pop()
-            event.accepted = true
+            stackView.pop();
+            event.accepted = true;
         }
     }
 }

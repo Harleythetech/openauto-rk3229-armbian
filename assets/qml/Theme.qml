@@ -4,18 +4,35 @@ import QtQuick 2.15
 QtObject {
     // ============================================================================
     // OpenAuto Automotive HMI Theme
-    // Dark background with cyan/blue accents
+    // Dark blue gradient background matching original UI
     // Designed for touch interfaces with large targets
     // ============================================================================
 
-    // Colors - Dark Automotive HMI with Cyan Accent
+    // Background gradient colors (from original UI)
+    readonly property color gradientTop: "#00021A"
+    readonly property color gradientBottom: "#001D3F"
+
+    // Solid backgrounds
     readonly property color backgroundColor: "#0D0D0D"
+    readonly property color settingsBackground: "#1A1A1A"
+
+    // Card and component colors
     readonly property color cardColor: "#1A1F2E"
     readonly property color cardHoverColor: "#242B3D"
+    readonly property color dockColor: "#1A1A1A"
+    readonly property color dockBorderColor: "#333333"
+
+    // Accent colors
     readonly property color primaryColor: "#00B4D8"
     readonly property color secondaryColor: "#0077B6"
+    readonly property color accentBlue: "#4A9FD4"
+
+    // Text colors
     readonly property color textPrimary: "#FFFFFF"
     readonly property color textSecondary: "#9CA3AF"
+    readonly property color textMuted: "#666666"
+
+    // Status colors
     readonly property color dangerColor: "#E63946"
     readonly property color successColor: "#10B981"
     readonly property color warningColor: "#F59E0B"
@@ -39,17 +56,30 @@ QtObject {
     readonly property int spacingLarge: 24
     readonly property int iconSize: 48
     readonly property int iconSizeSmall: 32
+    readonly property int iconSizeLarge: 64
+
+    // Dock bar
+    readonly property int dockHeight: 80
+    readonly property int dockIconSize: 40
+
+    // Settings sidebar
+    readonly property int sidebarWidth: 280
     readonly property int statusBarHeight: 56
 
-    // Typography
-    readonly property string fontFamily: "Roboto"
-    readonly property int fontSizeXLarge: 32
-    readonly property int fontSizeLarge: 24
-    readonly property int fontSizeMedium: 18
-    readonly property int fontSizeSmall: 14
+    // Typography - Readex Pro variable font
+    readonly property string fontFamily: "Readex Pro"
+    
+    // Font sizes (from Figma)
+    readonly property int fontSizeClock: 128       // Home clock
+    readonly property int fontSizeXXLarge: 96      // Fallback large
+    readonly property int fontSizeXLarge: 36       // Titles, tabs
+    readonly property int fontSizeLarge: 24        // Return button, date/time header
+    readonly property int fontSizeMedium: 20       // Album name, content
+    readonly property int fontSizeSmall: 16        // Artist, small text
+    readonly property int fontSizeXSmall: 14       // Very small text
 
     // Borders
-    readonly property int borderWidth: 2
+    readonly property int borderWidth: 1
 
     // Transparency for overlays
     readonly property real overlayOpacity: 0.85

@@ -54,6 +54,16 @@ namespace f1x
                     return currentTime_;
                 }
 
+                QString UIBackend::currentDate() const
+                {
+                    return QDateTime::currentDateTime().toString("MMMM d, yyyy");
+                }
+
+                QString UIBackend::amPm() const
+                {
+                    return QDateTime::currentDateTime().toString("AP");
+                }
+
                 QString UIBackend::networkSSID() const
                 {
                     return networkSSID_;

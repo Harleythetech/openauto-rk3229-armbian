@@ -39,15 +39,18 @@
         <file>black.png</file>
         <file>album-hot.png</file>
         <file>Roboto-Regular.ttf</file>
+        <file>ReadexPro-VariableFont_HEXP,wght.ttf</file>
     </qresource>
     <qresource prefix="/qml">
         <file alias="Main.qml">qml/Main.qml</file>
         <file alias="Theme.qml">qml/Theme.qml</file>
         <file alias="HomePage.qml">qml/HomePage.qml</file>
+        <file alias="MusicPage.qml">qml/MusicPage.qml</file>
         <file alias="SettingsPage.qml">qml/SettingsPage.qml</file>
         <file alias="qmldir">qml/qmldir</file>
         <file alias="components/TileButton.qml">qml/components/TileButton.qml</file>
         <file alias="components/StatusBar.qml">qml/components/StatusBar.qml</file>
         <file alias="components/SettingsCard.qml">qml/components/SettingsCard.qml</file>
+        <file alias="components/BottomDock.qml">qml/components/BottomDock.qml</file>
     </qresource>
 </RCC>
