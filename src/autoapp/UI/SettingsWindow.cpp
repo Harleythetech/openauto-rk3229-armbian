@@ -28,6 +28,7 @@
 #include <QMessageBox>
 #include <QNetworkInterface>
 #include <QProcess>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStorageInfo>
 #include <QTextStream>
@@ -2319,8 +2320,7 @@ void f1x::openauto::autoapp::ui::SettingsWindow::updateAudioLevels()
   // monitoring would require loopback device or PulseAudio monitor)
   int volumeLevel = ui_->horizontalSliderSystemVolume->value();
   // Animate with slight random variation to show "activity"
-  static int lastOutputLevel = 0;
-  int displayLevel = qMin(100, qMax(0, volumeLevel + (qrand() % 10 - 5)));
+  int displayLevel = qMin(100, qMax(0, volumeLevel + (QRandomGenerator::global()->bounded(10) - 5)));
   if (volumeLevel > 0)
   {
     outputDecayLevel = qMax(outputDecayLevel, displayLevel);

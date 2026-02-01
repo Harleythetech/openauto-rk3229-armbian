@@ -21,6 +21,7 @@
 #include <QQmlContext>
 #include <QScreen>
 #include <QQuickStyle>
+#include <QCursor>
 #include <aasdk/TCP/TCPWrapper.hpp>
 #include <aasdk/USB/AccessoryModeQueryChain.hpp>
 #include <aasdk/USB/AccessoryModeQueryChainFactory.hpp>
@@ -177,11 +178,11 @@ int main(int argc, char *argv[])
   // Hide cursor if configured
   if (configuration->showCursor() == false)
   {
-    qApplication.setOverrideCursor(Qt::BlankCursor);
+    qApplication.setOverrideCursor(QCursor(Qt::BlankCursor));
   }
   else
   {
-    qApplication.setOverrideCursor(Qt::ArrowCursor);
+    qApplication.setOverrideCursor(QCursor(Qt::ArrowCursor));
   }
 
   // Create UI backend for QML
