@@ -47,12 +47,18 @@ sudo apt install -y \
     pkg-config \
     git
 
-# Qt5 development libraries
+# Qt5 development libraries (including Qt Quick/QML for UI)
 sudo apt install -y \
     qtbase5-dev \
     qtmultimedia5-dev \
     qtconnectivity5-dev \
-    libqt5multimedia5-plugins
+    qtdeclarative5-dev \
+    qtquickcontrols2-5-dev \
+    libqt5multimedia5-plugins \
+    qml-module-qtquick2 \
+    qml-module-qtquick-controls2 \
+    qml-module-qtquick-window2 \
+    qml-module-qtquick-layouts
 
 # FFmpeg development libraries (for video decoding)
 sudo apt install -y \

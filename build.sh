@@ -87,7 +87,10 @@ while [[ $# -gt 0 ]]; do
             echo "Video Backend: FFmpeg DRM hwaccel + DRM Prime (lowest latency)"
             echo ""
             echo "Required dependencies (auto-installed with --auto-deps):"
-            echo "  Qt5:       qtbase5-dev, qtmultimedia5-dev, qtconnectivity5-dev"
+            echo "  Qt5:       qtbase5-dev, qtmultimedia5-dev, qtconnectivity5-dev,"
+            echo "             qtdeclarative5-dev, qtquickcontrols2-5-dev"
+            echo "  Qt5 QML:   qml-module-qtquick2, qml-module-qtquick-controls2,"
+            echo "             qml-module-qtquick-window2, qml-module-qtquick-layouts"
             echo "  Bluetooth: bluez, libbluetooth-dev"
             echo "  Audio:     librtaudio-dev"
             echo "  FFmpeg:    libavcodec-dev, libavformat-dev, libavutil-dev, libswscale-dev"
@@ -167,7 +170,7 @@ fi
 # Check for Qt5 development libraries
 if command -v pkg-config &> /dev/null; then
     if ! pkg-config --exists Qt5Core 2>/dev/null; then
-        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins"
+        MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins qtdeclarative5-dev qtquickcontrols2-5-dev qml-module-qtquick2 qml-module-qtquick-controls2 qml-module-qtquick-window2 qml-module-qtquick-layouts"
     fi
     if ! pkg-config --exists Qt5Multimedia 2>/dev/null; then
         MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtmultimedia5-dev"
@@ -184,7 +187,7 @@ if command -v pkg-config &> /dev/null; then
     fi
 else
     # pkg-config not available, assume Qt5 packages needed
-    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins qtconnectivity5-dev bluez libbluetooth-dev"
+    MISSING_DEV_DEPS="${MISSING_DEV_DEPS} qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins qtconnectivity5-dev qtdeclarative5-dev qtquickcontrols2-5-dev qml-module-qtquick2 qml-module-qtquick-controls2 qml-module-qtquick-window2 qml-module-qtquick-layouts bluez libbluetooth-dev"
 fi
 
 # Check for rtaudio
@@ -284,7 +287,9 @@ if [ -n "$ALL_MISSING_DEPS" ]; then
             echo "Installing additional recommended packages..."
             # Qt5 packages
             $APT_CMD install -y qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins \
-                qtconnectivity5-dev 2>/dev/null || true
+                qtconnectivity5-dev qtdeclarative5-dev qtquickcontrols2-5-dev \
+                qml-module-qtquick2 qml-module-qtquick-controls2 \
+                qml-module-qtquick-window2 qml-module-qtquick-layouts 2>/dev/null || true
             # Bluetooth packages
             $APT_CMD install -y bluez libbluetooth-dev 2>/dev/null || true
             # GStreamer packages
@@ -314,7 +319,10 @@ if [ -n "$ALL_MISSING_DEPS" ]; then
         echo ""
         echo "Full dependency list:"
         echo "  sudo apt-get install qtbase5-dev qtmultimedia5-dev libqt5multimedia5-plugins \\"
-        echo "      qtconnectivity5-dev bluez libbluetooth-dev librtaudio-dev libtag1-dev libblkid-dev libgps-dev \\"
+        echo "      qtconnectivity5-dev qtdeclarative5-dev qtquickcontrols2-5-dev \\"
+        echo "      qml-module-qtquick2 qml-module-qtquick-controls2 \\"
+        echo "      qml-module-qtquick-window2 qml-module-qtquick-layouts \\"
+        echo "      bluez libbluetooth-dev librtaudio-dev libtag1-dev libblkid-dev libgps-dev \\"
         echo "      libusb-1.0-0-dev libssl-dev libprotobuf-dev protobuf-compiler \\"
         echo "      libboost-all-dev cmake build-essential \\"
         echo "      gstreamer1.0-plugins-base gstreamer1.0-plugins-good \\"
