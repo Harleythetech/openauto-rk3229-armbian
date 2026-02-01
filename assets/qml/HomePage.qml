@@ -29,7 +29,7 @@ Item {
         anchors.centerIn: parent
         spacing: 8
 
-        // Time display with AM/PM
+        // Time display with AM/PM (only shows AM/PM in 12hr mode)
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 4
@@ -45,11 +45,12 @@ Item {
             Text {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 24
-                text: typeof backend !== "undefined" ? backend.amPm : "AM"
+                text: typeof backend !== "undefined" ? backend.amPm : ""
                 font.pixelSize: Theme.fontSizeXLarge
                 font.family: Theme.fontFamily
                 font.weight: Font.Bold
                 color: Theme.textPrimary
+                visible: text !== ""
             }
         }
 

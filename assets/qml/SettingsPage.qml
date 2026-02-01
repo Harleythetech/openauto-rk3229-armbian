@@ -103,9 +103,9 @@ Item {
                         anchors.leftMargin: Theme.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData
-                        font.pixelSize: Theme.fontSizeXLarge
+                        font.pixelSize: Theme.fontSizeLarge
                         font.family: Theme.fontFamily
-                        font.weight: root.selectedCategory === index ? Font.Medium : Font.Normal
+                        font.weight: root.selectedCategory === index ? Font.Medium : Font.Light
                         color: Theme.textPrimary
                     }
 
@@ -150,12 +150,15 @@ Item {
                 text: {
                     var dateStr = typeof backend !== "undefined" ? backend.currentDate : "February 1, 2026";
                     var timeStr = typeof backend !== "undefined" ? backend.currentTime : "00:00";
-                    var ampmStr = typeof backend !== "undefined" ? backend.amPm : "AM";
-                    return dateStr + " | " + timeStr + " " + ampmStr;
+                    var ampmStr = typeof backend !== "undefined" ? backend.amPm : "";
+                    if (ampmStr !== "")
+                        return dateStr + " | " + timeStr + " " + ampmStr;
+                    else
+                        return dateStr + " | " + timeStr;
                 }
-                font.pixelSize: Theme.fontSizeLarge
+                font.pixelSize: Theme.fontSizeMedium
                 font.family: Theme.fontFamily
-                font.weight: Font.Light
+                font.weight: Font.ExtraLight
                 color: Theme.textPrimary
             }
         }
@@ -208,6 +211,14 @@ Item {
             width: parent.width
 
             SettingToggle {
+                label: "24-Hour Time Format"
+                checked: typeof backend !== "undefined" ? backend.use24HourFormat : true
+                onToggled: function (value) {
+                    if (typeof backend !== "undefined")
+                        backend.setUse24HourFormat(value);
+                }
+            }
+            SettingToggle {
                 label: "Show Clock"
                 checked: typeof backend !== "undefined" ? backend.showClock : true
                 onToggled: function (value) {
@@ -253,14 +264,6 @@ Item {
                 onToggled: function (value) {
                     if (typeof backend !== "undefined")
                         backend.setShowNetworkinfo(value);
-                }
-            }
-            SettingToggle {
-                label: "Show Lux Sensor"
-                checked: typeof backend !== "undefined" ? backend.showLux : false
-                onToggled: function (value) {
-                    if (typeof backend !== "undefined")
-                        backend.setShowLux(value);
                 }
             }
 
@@ -867,6 +870,10 @@ Item {
                 label: "Qt Version"
                 value: typeof backend !== "undefined" ? backend.qtVersion : "5.15"
             }
+            SettingRow {
+                label: "Devs, Contributors"
+                value: "f1x.studio, Opencardev, Harleythetech, ilmich, jock"
+            }
 
             Item {
                 width: 1
@@ -874,7 +881,7 @@ Item {
             }
 
             Text {
-                text: "Based on f1x.studio OpenAuto\nModified for RK3229 SoC"
+                text: "Based on f1x.studio OpenAuto Modified for RK3229 SoC"
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.textSecondary
                 lineHeight: 1.4

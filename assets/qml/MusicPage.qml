@@ -33,8 +33,11 @@ Item {
         text: {
             var dateStr = typeof backend !== "undefined" ? backend.currentDate : "February 1, 2026";
             var timeStr = typeof backend !== "undefined" ? backend.currentTime : "00:00";
-            var ampmStr = typeof backend !== "undefined" ? backend.amPm : "AM";
-            return dateStr + " | " + timeStr + ampmStr;
+            var ampmStr = typeof backend !== "undefined" ? backend.amPm : "";
+            if (ampmStr !== "")
+                return dateStr + " | " + timeStr + " " + ampmStr;
+            else
+                return dateStr + " | " + timeStr;
         }
         font.pixelSize: Theme.fontSizeLarge
         font.family: Theme.fontFamily
@@ -149,10 +152,11 @@ Item {
         spacing: 80
 
         // Previous button
-        Text {
-            text: "⏮"
-            font.pixelSize: 48
-            color: Theme.textPrimary
+        Image {
+            width: 48
+            height: 48
+            source: "qrc:/prev-hot.png"
+            fillMode: Image.PreserveAspectFit
 
             MouseArea {
                 anchors.fill: parent
@@ -165,10 +169,11 @@ Item {
         }
 
         // Play/Pause button
-        Text {
-            text: typeof backend !== "undefined" && backend.isPlaying ? "⏸" : "▶"
-            font.pixelSize: 48
-            color: Theme.textPrimary
+        Image {
+            width: 48
+            height: 48
+            source: typeof backend !== "undefined" && backend.isPlaying ? "qrc:/pause-hot.png" : "qrc:/play-hot.png"
+            fillMode: Image.PreserveAspectFit
 
             MouseArea {
                 anchors.fill: parent
@@ -181,10 +186,11 @@ Item {
         }
 
         // Next button
-        Text {
-            text: "⏭"
-            font.pixelSize: 48
-            color: Theme.textPrimary
+        Image {
+            width: 48
+            height: 48
+            source: "qrc:/next-hot.png"
+            fillMode: Image.PreserveAspectFit
 
             MouseArea {
                 anchors.fill: parent
