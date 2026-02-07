@@ -312,6 +312,14 @@ install(CODE "
     endforeach()
 ")
 
+# Install audio-setup script to /opt/openauto
+install(FILES
+    audio-setup.sh
+    DESTINATION /opt/openauto
+    RENAME audio-setup.sh
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+)
+
 # Install crankshaft scripts to /opt/crankshaft
 install(FILES
     packaging/opt/crankshaft/crankshaft_default_env.sh
@@ -383,11 +391,11 @@ set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/opencardev/openauto")
 if (USE_FFMPEG_DRM)
     # Target FFmpeg 5.1 (Debian Bookworm) dependencies for the RK3229
     # Qt Quick/QML dependencies added for the new QML-based UI
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libavcodec59, libavutil57, libswscale6, libswresample4, libdrm2, libasound2, libqt5gui5, libqt5multimedia5, libqt5multimedia5-plugins, libqt5quick5, libqt5qml5, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects, libtag1v5")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libavcodec59, libavutil57, libswscale6, libswresample4, libdrm2, libasound2, libqt5gui5, libqt5multimedia5, libqt5multimedia5-plugins, libqt5quick5, libqt5qml5, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects, libtag1v5, bluez, udevil")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 else()
     # Fallback for standard builds
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5multimedia5, libqt5multimedia5-plugins, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, libqt5quick5, libqt5qml5, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libqt5multimedia5, libqt5multimedia5-plugins, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-libav, libqt5quick5, libqt5qml5, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects, bluez, udevil")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 endif()
 

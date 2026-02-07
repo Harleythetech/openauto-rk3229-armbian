@@ -84,7 +84,6 @@ namespace f1x
                     Q_PROPERTY(bool musicChannelEnabled READ musicChannelEnabled WRITE setMusicChannelEnabled NOTIFY settingsChanged)
                     Q_PROPERTY(bool guidanceChannelEnabled READ guidanceChannelEnabled WRITE setGuidanceChannelEnabled NOTIFY settingsChanged)
                     Q_PROPERTY(bool telephonyChannelEnabled READ telephonyChannelEnabled WRITE setTelephonyChannelEnabled NOTIFY settingsChanged)
-                    Q_PROPERTY(int brightness READ brightness WRITE setBrightness NOTIFY brightnessChanged)
                     Q_PROPERTY(int volume READ volume WRITE setVolume NOTIFY volumeChanged)
 
                     // ========== Input Settings ==========
@@ -166,7 +165,6 @@ namespace f1x
                     bool musicChannelEnabled() const;
                     bool guidanceChannelEnabled() const;
                     bool telephonyChannelEnabled() const;
-                    int brightness() const;
                     int volume() const;
 
                     // ========== Input Settings Getters ==========
@@ -232,8 +230,7 @@ namespace f1x
                     Q_INVOKABLE void setDisableShutdown(bool value);
                     Q_INVOKABLE void setDisableScreenOff(bool value);
                     Q_INVOKABLE void setDebugMode(bool value);
-                    void setBrightness(int value);
-                    void setVolume(int value);
+                    Q_INVOKABLE void setVolume(int value);
 
                     // ========== Action Methods ==========
                     Q_INVOKABLE void startAndroidAutoUSB();
@@ -272,7 +269,6 @@ namespace f1x
                     void networkChanged();
                     void bluetoothChanged();
                     void videoResolutionChanged();
-                    void brightnessChanged();
                     void volumeChanged();
                     void settingsChanged();
                     void systemInfoChanged();
@@ -317,7 +313,6 @@ namespace f1x
                     QString wifiIP_;
                     bool bluetoothConnected_;
                     bool wifiConnected_;
-                    int brightness_;
                     int volume_;
                     bool use24HourFormat_;
 

@@ -38,8 +38,33 @@ namespace f1x
 
                 UIBackend::UIBackend(configuration::IConfiguration::Pointer configuration,
                                      QObject *parent)
-                    : QObject(parent), configuration_(std::move(configuration)), clockTimer_(new QTimer(this)), systemInfoTimer_(new QTimer(this)), currentTime_("00:00"), networkSSID_(""), networkConnectionType_("Not Connected"), wifiIP_(""), bluetoothConnected_(false), wifiConnected_(false), brightness_(50), volume_(80), use24HourFormat_(true), freeMemory_("N/A"), cpuFrequency_("N/A"), cpuTemperature_("N/A"), disconnectTimeout_(60), shutdownTimeout_(0), disableShutdown_(false), disableScreenOff_(false), debugMode_(false), hotspotEnabled_(false), bluetoothAutoPair_(false), trackTitle_(""), albumName_(""), artistName_(""), albumArtPath_(""), isPlaying_(false)
+                    : QObject(parent), configuration_(std::move(configuration)), clockTimer_(new QTimer(this)), systemInfoTimer_(new QTimer(this)), currentTime_("00:00"), networkSSID_(""), networkConnectionType_("Not Connected"), wifiIP_(""), bluetoothConnected_(false), wifiConnected_(false), volume_(80), use24HourFormat_(true), freeMemory_("N/A"), cpuFrequency_("N/A"), cpuTemperature_("N/A"), disconnectTimeout_(60), shutdownTimeout_(0), disableShutdown_(false), disableScreenOff_(false), debugMode_(false), hotspotEnabled_(false), bluetoothAutoPair_(false), trackTitle_(""), albumName_(""), artistName_(""), albumArtPath_(""), isPlaying_(false)
                 {
+                    // Load persisted clock format preference
+                    QFile clockFmtFile("/tmp/.openauto_clockformat");
+                    if (clockFmtFile.open(QIODevice::ReadOnly))
+                    {
+                        QString val = QString::fromUtf8(clockFmtFile.readAll()).trimmed();
+                        clockFmtFile.close();
+                        use24HourFormat_ = (val != "12");
+                    }
+
+                    // Read initial system volume from amixer
+                    QProcess amixerRead;
+                    amixerRead.start("amixer", QStringList() << "get" << "Master");
+                    if (amixerRead.waitForFinished(1000))
+                    {
+                        QString output = QString::fromUtf8(amixerRead.readAllStandardOutput());
+                        // Parse "[XX%]" from output
+                        int pctStart = output.indexOf('[');
+                        int pctEnd = output.indexOf("%]");
+                        if (pctStart >= 0 && pctEnd > pctStart)
+                        {
+                            QString pctStr = output.mid(pctStart + 1, pctEnd - pctStart - 1);
+                            volume_ = pctStr.toInt();
+                            OPENAUTO_LOG(info) << "[UIBackend] Initial system volume: " << volume_ << "%";
+                        }
+                    }
                     // Update clock every second
                     connect(clockTimer_, &QTimer::timeout, this, &UIBackend::updateClock);
                     clockTimer_->start(1000);
@@ -303,11 +328,6 @@ namespace f1x
                     return configuration_ ? configuration_->telephonyAudioChannelEnabled() : true;
                 }
 
-                int UIBackend::brightness() const
-                {
-                    return brightness_;
-                }
-
                 int UIBackend::volume() const
                 {
                     return volume_;
@@ -448,6 +468,16 @@ namespace f1x
                     if (use24HourFormat_ != value)
                     {
                         use24HourFormat_ = value;
+
+                        // Persist the preference
+                        QFile clockFmtFile("/tmp/.openauto_clockformat");
+                        if (clockFmtFile.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                        {
+                            clockFmtFile.write(value ? "24" : "12");
+                            clockFmtFile.close();
+                        }
+
+                        updateClock();
                         emit use24HourFormatChanged();
                         emit currentTimeChanged();
                     }
@@ -717,34 +747,24 @@ namespace f1x
                     emit settingsChanged();
                 }
 
-                void UIBackend::setBrightness(int value)
-                {
-                    if (brightness_ != value)
-                    {
-                        brightness_ = value;
-
-                        // Try to set system brightness
-                        const char *brightnessPath = "/sys/class/backlight/backlight/brightness";
-                        QFile file(brightnessPath);
-                        if (file.open(QIODevice::WriteOnly))
-                        {
-                            file.write(QString::number(value).toUtf8());
-                            file.close();
-                        }
-
-                        emit brightnessChanged();
-                    }
-                }
-
                 void UIBackend::setVolume(int value)
                 {
                     if (volume_ != value)
                     {
                         volume_ = value;
 
-                        // Set system volume via amixer
-                        QString cmd = QString("amixer set Master %1%").arg(value);
-                        QProcess::execute("sh", QStringList() << "-c" << cmd);
+                        // Map 0-100 percentage to 0-255 raw value for ALSA Master control
+                        int rawValue = static_cast<int>(value * 255.0 / 100.0 + 0.5);
+                        if (rawValue > 255)
+                            rawValue = 255;
+                        if (rawValue < 0)
+                            rawValue = 0;
+
+                        // Set system volume via amixer using raw value
+                        QProcess *proc = new QProcess();
+                        proc->start("amixer", QStringList() << "set" << "Master" << QString::number(rawValue));
+                        QObject::connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                                         proc, &QProcess::deleteLater);
 
                         emit volumeChanged();
                     }
@@ -791,7 +811,6 @@ namespace f1x
                 {
                     OPENAUTO_LOG(info) << "[UIBackend] Go back requested";
                     emit requestGoBack();
-                    emit showHome();
                 }
 
                 void UIBackend::saveSettings()

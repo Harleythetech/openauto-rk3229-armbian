@@ -8,6 +8,7 @@
 #include <QStorageInfo>
 #include <QVariantMap>
 #include <QDirIterator>
+#include <QTimer>
 #include <f1x/openauto/autoapp/Player/FileBrowserBackend.hpp>
 #include <f1x/openauto/Common/Log.hpp>
 
@@ -48,8 +49,14 @@ namespace f1x
                     connect(mediaWatcher_, &QFileSystemWatcher::directoryChanged,
                             this, &FileBrowserBackend::refreshVolumes);
 
+                    // udevil/devmon mounts may not trigger QFileSystemWatcher reliably
+                    // so also poll every 3 seconds for mount changes
+                    auto *pollTimer = new QTimer(this);
+                    connect(pollTimer, &QTimer::timeout, this, &FileBrowserBackend::refreshVolumes);
+                    pollTimer->start(3000);
+
                     refreshVolumes();
-                    OPENAUTO_LOG(info) << "[FileBrowser] Initialized, watching /media for USB drives";
+                    OPENAUTO_LOG(info) << "[FileBrowser] Initialized, watching /media for USB drives (polling every 3s)";
                 }
 
                 FileBrowserBackend::~FileBrowserBackend() = default;
@@ -94,7 +101,7 @@ namespace f1x
 
                 void FileBrowserBackend::refreshVolumes()
                 {
-                    mountedVolumes_.clear();
+                    QVariantList newVolumes;
 
                     // Scan QStorageInfo for volumes under /media
                     const auto volumes = QStorageInfo::mountedVolumes();
@@ -111,7 +118,7 @@ namespace f1x
                             entry["path"] = mountPoint;
                             entry["size"] = QString::number(vol.bytesTotal() / (1024 * 1024)) + " MB";
                             entry["free"] = QString::number(vol.bytesAvailable() / (1024 * 1024)) + " MB";
-                            mountedVolumes_.append(entry);
+                            newVolumes.append(entry);
                         }
                     }
 
@@ -125,7 +132,7 @@ namespace f1x
                             QString subPath = mediaDir.absoluteFilePath(sub);
                             // Check if already in list
                             bool found = false;
-                            for (const auto &v : mountedVolumes_)
+                            for (const auto &v : newVolumes)
                             {
                                 if (v.toMap()["path"].toString() == subPath)
                                 {
@@ -144,14 +151,45 @@ namespace f1x
                                     entry["path"] = subPath;
                                     entry["size"] = "";
                                     entry["free"] = "";
-                                    mountedVolumes_.append(entry);
+                                    newVolumes.append(entry);
                                 }
                             }
                         }
                     }
 
-                    OPENAUTO_LOG(info) << "[FileBrowser] Found " << mountedVolumes_.size() << " mounted volumes";
-                    emit volumesChanged();
+                    // Only emit if the volume list actually changed
+                    bool changed = (newVolumes.size() != mountedVolumes_.size());
+                    if (!changed)
+                    {
+                        for (int i = 0; i < newVolumes.size(); i++)
+                        {
+                            if (newVolumes[i].toMap()["path"] != mountedVolumes_[i].toMap()["path"])
+                            {
+                                changed = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        mountedVolumes_ = newVolumes;
+                        OPENAUTO_LOG(info) << "[FileBrowser] Found " << mountedVolumes_.size() << " mounted volumes";
+
+                        // Re-add any new /media subdirectories to the watcher
+                        if (mediaDir.exists())
+                        {
+                            const auto subdirs = mediaDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+                            for (const auto &sub : subdirs)
+                            {
+                                QString subPath = mediaDir.absoluteFilePath(sub);
+                                if (!mediaWatcher_->directories().contains(subPath))
+                                    mediaWatcher_->addPath(subPath);
+                            }
+                        }
+
+                        emit volumesChanged();
+                    }
                 }
 
                 void FileBrowserBackend::selectVolume(const QString &mountPath)

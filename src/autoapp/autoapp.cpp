@@ -276,6 +276,24 @@ int main(int argc, char *argv[])
                      }
                    });
 
+  // Bridge App lifecycle callbacks to UIBackend Qt signals
+  // These run on the boost strand, so use QMetaObject::invokeMethod for thread safety
+  app->onAAStarted = [uiBackend]()
+  {
+    OPENAUTO_LOG(info) << "[AutoApp] Android Auto entity started.";
+    QMetaObject::invokeMethod(uiBackend, [uiBackend]()
+                              { emit uiBackend->androidAutoStarted(); }, Qt::QueuedConnection);
+  };
+
+  app->onAAStopped = [uiBackend, &app]()
+  {
+    OPENAUTO_LOG(info) << "[AutoApp] Android Auto entity stopped — auto-resume enabled.";
+    // Keep autostart enabled so next USB connection auto-starts AA
+    app->disableAutostartEntity = false;
+    QMetaObject::invokeMethod(uiBackend, [uiBackend]()
+                              { emit uiBackend->androidAutoStopped(); }, Qt::QueuedConnection);
+  };
+
   QObject::connect(uiBackend, &autoapp::ui::UIBackend::exitRequested,
                    [&qApplication]()
                    {

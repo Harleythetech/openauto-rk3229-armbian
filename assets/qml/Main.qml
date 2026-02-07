@@ -136,6 +136,10 @@ ApplicationWindow {
             showHomePage();
         }
 
+        function onRequestGoBack() {
+            goBack();
+        }
+
         function onAndroidAutoStarted() {
             // Hide QML UI when Android Auto projection starts
             mainWindow.visible = false;
@@ -143,8 +147,8 @@ ApplicationWindow {
 
         function onAndroidAutoStopped() {
             // Show QML UI when Android Auto projection ends
+            // Don't navigate — preserve whatever page was active before AA started
             mainWindow.visible = true;
-            showHomePage();
         }
     }
 

@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <functional>
 #include <aasdk/USB/IUSBHub.hpp>
 #include <aasdk/USB/IConnectedAccessoriesEnumerator.hpp>
 #include <aasdk/USB/USBWrapper.hpp>
@@ -28,50 +29,54 @@
 
 namespace f1x
 {
-namespace openauto
-{
-namespace autoapp
-{
+    namespace openauto
+    {
+        namespace autoapp
+        {
 
-class App: public service::IAndroidAutoEntityEventHandler, public std::enable_shared_from_this<App>
-{
-public:
-    typedef std::shared_ptr<App> Pointer;
+            class App : public service::IAndroidAutoEntityEventHandler, public std::enable_shared_from_this<App>
+            {
+            public:
+                typedef std::shared_ptr<App> Pointer;
 
-    App(boost::asio::io_service& ioService, aasdk::usb::USBWrapper& usbWrapper, aasdk::tcp::ITCPWrapper& tcpWrapper, service::IAndroidAutoEntityFactory& androidAutoEntityFactory,
-        aasdk::usb::IUSBHub::Pointer usbHub, aasdk::usb::IConnectedAccessoriesEnumerator::Pointer connectedAccessoriesEnumerator);
+                App(boost::asio::io_service &ioService, aasdk::usb::USBWrapper &usbWrapper, aasdk::tcp::ITCPWrapper &tcpWrapper, service::IAndroidAutoEntityFactory &androidAutoEntityFactory,
+                    aasdk::usb::IUSBHub::Pointer usbHub, aasdk::usb::IConnectedAccessoriesEnumerator::Pointer connectedAccessoriesEnumerator);
 
-    void waitForUSBDevice();
-    void start(aasdk::tcp::ITCPEndpoint::SocketPointer socket);
-    void stop();
-    void pause();
-    void resume();
-    void onAndroidAutoQuit() override;
-    bool disableAutostartEntity = false;
+                void waitForUSBDevice();
+                void start(aasdk::tcp::ITCPEndpoint::SocketPointer socket);
+                void stop();
+                void pause();
+                void resume();
+                void onAndroidAutoQuit() override;
+                bool disableAutostartEntity = false;
 
-private:
-    using std::enable_shared_from_this<App>::shared_from_this;
-    void enumerateDevices();
-    void waitForDevice();
-    void aoapDeviceHandler(aasdk::usb::DeviceHandle deviceHandle);
-    void onUSBHubError(const aasdk::error::Error& error);
+                // Lifecycle callbacks (set from autoapp.cpp to bridge to UIBackend)
+                std::function<void()> onAAStarted;
+                std::function<void()> onAAStopped;
 
-    boost::asio::io_service& ioService_;
-    aasdk::usb::USBWrapper& usbWrapper_;
-    aasdk::tcp::ITCPWrapper& tcpWrapper_;
-    boost::asio::io_service::strand strand_;
-    service::IAndroidAutoEntityFactory& androidAutoEntityFactory_;
-    aasdk::usb::IUSBHub::Pointer usbHub_;
-    aasdk::usb::IConnectedAccessoriesEnumerator::Pointer connectedAccessoriesEnumerator_;
-    boost::asio::ip::tcp::acceptor acceptor_;
-    service::IAndroidAutoEntity::Pointer androidAutoEntity_;
-    bool isStopped_;
+            private:
+                using std::enable_shared_from_this<App>::shared_from_this;
+                void enumerateDevices();
+                void waitForDevice();
+                void aoapDeviceHandler(aasdk::usb::DeviceHandle deviceHandle);
+                void onUSBHubError(const aasdk::error::Error &error);
 
-    void startServerSocket();
+                boost::asio::io_service &ioService_;
+                aasdk::usb::USBWrapper &usbWrapper_;
+                aasdk::tcp::ITCPWrapper &tcpWrapper_;
+                boost::asio::io_service::strand strand_;
+                service::IAndroidAutoEntityFactory &androidAutoEntityFactory_;
+                aasdk::usb::IUSBHub::Pointer usbHub_;
+                aasdk::usb::IConnectedAccessoriesEnumerator::Pointer connectedAccessoriesEnumerator_;
+                boost::asio::ip::tcp::acceptor acceptor_;
+                service::IAndroidAutoEntity::Pointer androidAutoEntity_;
+                bool isStopped_;
 
-    void handleNewClient(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const boost::system::error_code &err);
-};
+                void startServerSocket();
 
-}
-}
+                void handleNewClient(std::shared_ptr<boost::asio::ip::tcp::socket> socket, const boost::system::error_code &err);
+            };
+
+        }
+    }
 }

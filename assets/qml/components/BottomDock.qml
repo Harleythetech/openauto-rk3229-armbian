@@ -2,7 +2,7 @@ import QtQuick 2.15
 import ".."
 
 // BottomDock - Navigation bar at bottom of screen
-// Matches original OpenAuto UI with 5 buttons
+// 5 buttons: Home, Music, Android Auto, Volume, Settings
 
 Rectangle {
     id: root
@@ -29,70 +29,167 @@ Rectangle {
     Row {
         anchors.fill: parent
 
-        Repeater {
-            model: [
-                {
-                    icon: "qrc:/home-hot.png",
-                    action: "home"
-                },
-                {
-                    icon: "qrc:/mp3-hot.png",
-                    action: "music"
-                },
-                {
-                    icon: "qrc:/Android_Auto_icon.svg",
-                    action: "aa"
-                },
-                {
-                    icon: "qrc:/volume-hot.png",
-                    action: "volume"
-                },
-                {
-                    icon: "qrc:/settings-hot.png",
-                    action: "settings"
-                }
-            ]
+        // Home button
+        Rectangle {
+            width: root.width / 5
+            height: root.height
+            color: homeMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
 
             Rectangle {
-                width: root.width / 5
-                height: root.height
-                color: mouseArea.pressed ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.6
+                height: 3
+                color: root.currentIndex === 0 ? Theme.primaryColor : "transparent"
+            }
 
-                // Active indicator line at top
-                Rectangle {
-                    anchors.top: parent.top
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width * 0.6
-                    height: 3
-                    color: root.currentIndex === index ? Theme.primaryColor : "transparent"
+            Image {
+                anchors.centerIn: parent
+                width: Theme.dockIconSize
+                height: Theme.dockIconSize
+                source: "qrc:/home-hot.png"
+                fillMode: Image.PreserveAspectFit
+                opacity: root.currentIndex === 0 ? 1.0 : 0.7
+            }
+
+            MouseArea {
+                id: homeMouseArea
+                anchors.fill: parent
+                onClicked: {
+                    root.currentIndex = 0;
+                    root.homeClicked();
                 }
+            }
+        }
 
-                // Icon
-                Image {
-                    anchors.centerIn: parent
-                    width: Theme.dockIconSize
-                    height: Theme.dockIconSize
-                    source: modelData.icon
-                    fillMode: Image.PreserveAspectFit
-                    opacity: root.currentIndex === index ? 1.0 : 0.7
+        // Music button
+        Rectangle {
+            width: root.width / 5
+            height: root.height
+            color: musicMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.6
+                height: 3
+                color: root.currentIndex === 1 ? Theme.primaryColor : "transparent"
+            }
+
+            Image {
+                anchors.centerIn: parent
+                width: Theme.dockIconSize
+                height: Theme.dockIconSize
+                source: "qrc:/mp3-hot.png"
+                fillMode: Image.PreserveAspectFit
+                opacity: root.currentIndex === 1 ? 1.0 : 0.7
+            }
+
+            MouseArea {
+                id: musicMouseArea
+                anchors.fill: parent
+                onClicked: {
+                    root.currentIndex = 1;
+                    root.musicClicked();
                 }
+            }
+        }
 
-                MouseArea {
-                    id: mouseArea
-                    anchors.fill: parent
-                    onClicked: {
-                        root.currentIndex = index;
-                        if (modelData.action === "home")
-                            root.homeClicked();
-                        else if (modelData.action === "music")
-                            root.musicClicked();
-                        else if (modelData.action === "aa")
-                            root.androidAutoClicked();
-                        else if (modelData.action === "volume")
-                            root.volumeClicked();
-                        else if (modelData.action === "settings")
-                            root.settingsClicked();
-                    }
+        // Android Auto button (canvas icon - no SVG dependency)
+        Rectangle {
+            width: root.width / 5
+            height: root.height
+            color: aaMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.6
+                height: 3
+                color: root.currentIndex === 2 ? Theme.primaryColor : "transparent"
+            }
+
+            Image {
+                anchors.centerIn: parent
+                width: Theme.dockIconSize
+                height: Theme.dockIconSize
+                source: "qrc:/Android_Auto_icon.png"
+                fillMode: Image.PreserveAspectFit
+                opacity: root.currentIndex === 2 ? 1.0 : 0.7
+            }
+
+            MouseArea {
+                id: aaMouseArea
+                anchors.fill: parent
+                onClicked: {
+                    root.currentIndex = 2;
+                    root.androidAutoClicked();
+                }
+            }
+        }
+
+        // Volume button
+        Rectangle {
+            width: root.width / 5
+            height: root.height
+            color: volumeMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.6
+                height: 3
+                color: root.currentIndex === 3 ? Theme.primaryColor : "transparent"
+            }
+
+            Image {
+                anchors.centerIn: parent
+                width: Theme.dockIconSize
+                height: Theme.dockIconSize
+                source: "qrc:/volume-hot.png"
+                fillMode: Image.PreserveAspectFit
+                opacity: root.currentIndex === 3 ? 1.0 : 0.7
+            }
+
+            MouseArea {
+                id: volumeMouseArea
+                anchors.fill: parent
+                onClicked: {
+                    root.currentIndex = 3;
+                    root.volumeClicked();
+                }
+            }
+        }
+
+        // Settings button
+        Rectangle {
+            width: root.width / 5
+            height: root.height
+            color: settingsMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+
+            Rectangle {
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width * 0.6
+                height: 3
+                color: root.currentIndex === 4 ? Theme.primaryColor : "transparent"
+            }
+
+            Image {
+                anchors.centerIn: parent
+                width: Theme.dockIconSize
+                height: Theme.dockIconSize
+                source: "qrc:/settings-hot.png"
+                fillMode: Image.PreserveAspectFit
+                opacity: root.currentIndex === 4 ? 1.0 : 0.7
+            }
+
+            MouseArea {
+                id: settingsMouseArea
+                anchors.fill: parent
+                onClicked: {
+                    root.currentIndex = 4;
+                    root.settingsClicked();
                 }
             }
         }

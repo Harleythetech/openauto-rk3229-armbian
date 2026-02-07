@@ -38,11 +38,11 @@
         <file>coverlogo.png</file>
         <file>black.png</file>
         <file>album-hot.png</file>
-        <file>Android_Auto_icon.svg</file>
-        <file>Folder.svg</file>
-        <file>USB.svg</file>
-        <file>Repeat.svg</file>
-        <file>Repeat1.svg</file>
+        <file>Android_Auto_icon.png</file>
+        <file>File.png</file>
+        <file>USB.png</file>
+        <file>Repeat.png</file>
+        <file>Repeat1.png</file>
         <file>Roboto-Regular.ttf</file>
         <file>ReadexPro-VariableFont_HEXP,wght.ttf</file>
     </qresource>

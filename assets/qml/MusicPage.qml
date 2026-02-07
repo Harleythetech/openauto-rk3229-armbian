@@ -1,10 +1,9 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import "."
-import "components"
 
-// MusicPage - Music player with album art, controls and progress bar
-// Controls: Folder | Prev | Play/Pause | Next | Repeat
+// MusicPage - Music player matching design reference
+// Layout: Date/time top-right, centered album art + track info, large controls at bottom
 
 Item {
     id: root
@@ -26,7 +25,7 @@ Item {
         }
     }
 
-    // Date/Time in top-right corner
+    // Date/Time in top-right corner (matches design: "January 30, 2025 | 00:00AM")
     Text {
         anchors.top: parent.top
         anchors.right: parent.right
@@ -37,7 +36,7 @@ Item {
             var timeStr = typeof backend !== "undefined" ? backend.currentTime : "00:00";
             var ampmStr = typeof backend !== "undefined" ? backend.amPm : "";
             if (ampmStr !== "")
-                return dateStr + " | " + timeStr + " " + ampmStr;
+                return dateStr + " | " + timeStr + ampmStr;
             else
                 return dateStr + " | " + timeStr;
         }
@@ -47,37 +46,16 @@ Item {
         color: Theme.textPrimary
     }
 
-    // Back arrow (left side)
-    Text {
-        anchors.left: parent.left
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: 32
-        text: "‹"
-        font.pixelSize: 72
-        font.weight: Font.Light
-        color: Theme.textPrimary
-        opacity: 0.7
-
-        MouseArea {
-            anchors.fill: parent
-            anchors.margins: -20
-            onClicked: {
-                if (typeof backend !== "undefined")
-                    backend.goBack();
-            }
-        }
-    }
-
-    // Center content area
+    // Center content area — album art + track info side by side
     Row {
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: -50
-        spacing: 40
+        anchors.verticalCenterOffset: -40
+        spacing: 48
 
-        // Album art
+        // Album art — large (250x250)
         Rectangle {
-            width: 200
-            height: 200
+            width: 250
+            height: 250
             color: "transparent"
             border.width: 2
             border.color: Qt.rgba(1, 1, 1, 0.3)
@@ -86,9 +64,9 @@ Item {
             // Placeholder CD icon
             Rectangle {
                 anchors.centerIn: parent
-                width: 120
-                height: 120
-                radius: 60
+                width: 140
+                height: 140
+                radius: 70
                 color: "transparent"
                 border.width: 2
                 border.color: Qt.rgba(1, 1, 1, 0.3)
@@ -96,14 +74,13 @@ Item {
 
                 Rectangle {
                     anchors.centerIn: parent
-                    width: 30
-                    height: 30
-                    radius: 15
+                    width: 36
+                    height: 36
+                    radius: 18
                     color: Qt.rgba(1, 1, 1, 0.3)
                 }
             }
 
-            // Album art image
             Image {
                 id: albumArt
                 anchors.fill: parent
@@ -117,11 +94,11 @@ Item {
             }
         }
 
-        // Track info
+        // Track info column
         Column {
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 8
-            width: Math.min(root.width - 400, 360)
+            spacing: 10
+            width: Math.min(root.width - 450, 380)
 
             // Track title
             Text {
@@ -167,107 +144,61 @@ Item {
                 color: Theme.textSecondary
                 elide: Text.ElideRight
             }
-        }
-    }
 
-    // Progress bar
-    Column {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: controlsRow.top
-        anchors.bottomMargin: 20
-        width: parent.width * 0.6
-        spacing: 4
-
-        Slider {
-            id: progressSlider
-            width: parent.width
-            from: 0
-            to: typeof audioPlayer !== "undefined" ? Math.max(audioPlayer.duration, 1) : 1
-            value: typeof audioPlayer !== "undefined" ? audioPlayer.position : 0
-            enabled: typeof audioPlayer !== "undefined" && audioPlayer.playing
-
-            onMoved: {
-                if (typeof audioPlayer !== "undefined")
-                    audioPlayer.seek(value);
-            }
-
-            background: Rectangle {
-                x: progressSlider.leftPadding
-                y: progressSlider.topPadding + progressSlider.availableHeight / 2 - height / 2
-                width: progressSlider.availableWidth
-                height: 4
-                radius: 2
-                color: Qt.rgba(1, 1, 1, 0.15)
-
-                Rectangle {
-                    width: progressSlider.visualPosition * parent.width
-                    height: parent.height
-                    radius: 2
-                    color: Theme.primaryColor
+            // Audio quality info (below artist)
+            Text {
+                width: parent.width
+                text: {
+                    var parts = [];
+                    if (typeof audioPlayer !== "undefined" && audioPlayer.playlistCount > 0)
+                        parts.push((audioPlayer.playlistIndex + 1) + " / " + audioPlayer.playlistCount);
+                    if (typeof audioPlayer !== "undefined" && audioPlayer.sampleRate > 0) {
+                        var rateKhz = (audioPlayer.sampleRate / 1000).toFixed(1) + "kHz";
+                        var depth = audioPlayer.bitDepth + "-bit";
+                        var quality = rateKhz + " / " + depth;
+                        if (audioPlayer.nativeOffload)
+                            quality += " · Offload";
+                        parts.push(quality);
+                    }
+                    return parts.join("   ·   ");
                 }
-            }
-
-            handle: Rectangle {
-                x: progressSlider.leftPadding + progressSlider.visualPosition * (progressSlider.availableWidth - width)
-                y: progressSlider.topPadding + progressSlider.availableHeight / 2 - height / 2
-                width: 12
-                height: 12
-                radius: 6
-                color: "#FFFFFF"
-                visible: progressSlider.enabled
-            }
-        }
-
-        // Time labels
-        Row {
-            width: parent.width
-            Text {
-                text: formatTime(typeof audioPlayer !== "undefined" ? audioPlayer.position : 0)
                 font.pixelSize: Theme.fontSizeXSmall
                 font.family: Theme.fontFamily
+                font.weight: Font.Light
                 color: Theme.textSecondary
-            }
-            Item {
-                width: parent.width - 80
-                height: 1
-            }
-            Text {
-                text: formatTime(typeof audioPlayer !== "undefined" ? audioPlayer.duration : 0)
-                font.pixelSize: Theme.fontSizeXSmall
-                font.family: Theme.fontFamily
-                color: Theme.textSecondary
-                horizontalAlignment: Text.AlignRight
+                visible: text !== ""
             }
         }
     }
 
     // Media controls row: Folder | Prev | Play/Pause | Next | Repeat
+    // Large controls matching design reference (~64px)
     Row {
         id: controlsRow
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 100
-        spacing: 60
+        spacing: 64
 
         // Folder button - opens file browser
         Image {
-            width: 36
-            height: 36
-            source: "qrc:/Folder.svg"
+            width: 48
+            height: 48
+            source: "qrc:/File.png"
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
 
             MouseArea {
                 anchors.fill: parent
-                anchors.margins: -15
+                anchors.margins: -20
                 onClicked: root.openFileBrowser()
             }
         }
 
         // Previous button
         Image {
-            width: 48
-            height: 48
+            width: 64
+            height: 64
             source: "qrc:/prev-hot.png"
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
@@ -282,10 +213,10 @@ Item {
             }
         }
 
-        // Play/Pause button
+        // Play/Pause button (largest)
         Image {
-            width: 48
-            height: 48
+            width: 72
+            height: 72
             source: {
                 if (typeof audioPlayer !== "undefined" && audioPlayer.playing)
                     return "qrc:/pause-hot.png";
@@ -306,8 +237,8 @@ Item {
 
         // Next button
         Image {
-            width: 48
-            height: 48
+            width: 64
+            height: 64
             source: "qrc:/next-hot.png"
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
@@ -324,12 +255,12 @@ Item {
 
         // Repeat button
         Image {
-            width: 36
-            height: 36
+            width: 48
+            height: 48
             source: {
                 if (typeof audioPlayer !== "undefined" && audioPlayer.repeatMode === 2)
-                    return "qrc:/Repeat1.svg";
-                return "qrc:/Repeat.svg";
+                    return "qrc:/Repeat1.png";
+                return "qrc:/Repeat.png";
             }
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
@@ -341,38 +272,13 @@ Item {
 
             MouseArea {
                 anchors.fill: parent
-                anchors.margins: -15
+                anchors.margins: -20
                 onClicked: {
                     if (typeof audioPlayer !== "undefined")
                         audioPlayer.cycleRepeatMode();
                 }
             }
         }
-    }
-
-    // Playlist info + audio quality
-    Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 70
-        text: {
-            var parts = [];
-            if (typeof audioPlayer !== "undefined" && audioPlayer.playlistCount > 0)
-                parts.push((audioPlayer.playlistIndex + 1) + " / " + audioPlayer.playlistCount);
-            if (typeof audioPlayer !== "undefined" && audioPlayer.sampleRate > 0) {
-                var rateKhz = (audioPlayer.sampleRate / 1000).toFixed(1) + "kHz";
-                var depth = audioPlayer.bitDepth + "-bit";
-                var quality = rateKhz + " / " + depth;
-                if (audioPlayer.nativeOffload)
-                    quality += " · Offload";
-                parts.push(quality);
-            }
-            return parts.join("   ·   ");
-        }
-        font.pixelSize: Theme.fontSizeXSmall
-        font.family: Theme.fontFamily
-        font.weight: Font.Light
-        color: Theme.textSecondary
     }
 
     function formatTime(ms) {

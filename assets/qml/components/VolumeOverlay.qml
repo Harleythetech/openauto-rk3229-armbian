@@ -70,8 +70,8 @@ Rectangle {
 
             onMoved: {
                 hideTimer.restart();
-                if (typeof backend !== "undefined")
-                    backend.setVolume(value);
+                if (typeof backend !== "undefined" && backend !== null)
+                    backend.setVolume(Math.round(value));
             }
 
             background: Rectangle {
