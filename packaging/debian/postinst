@@ -31,9 +31,9 @@ case "$1" in
             /bin/systemctl daemon-reload || true
         fi
 
-        # Stop and mask getty@tty2 to prevent interference with linuxfb GUI
+        # Stop and mask getty@tty2 to prevent interference with EGLFS GUI
         if [ -x /bin/systemctl ]; then
-            echo "Configuring tty2 for OpenAuto linuxfb output..."
+            echo "Configuring tty2 for OpenAuto EGLFS output..."
             /bin/systemctl stop getty@tty2.service 2>/dev/null || true
             /bin/systemctl mask getty@tty2.service 2>/dev/null || true
         fi

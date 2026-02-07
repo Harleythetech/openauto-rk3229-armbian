@@ -137,15 +137,16 @@ Item {
                 color: Qt.rgba(1, 1, 1, 0.08)
             }
 
-            Column {
+            Item {
+                id: rootContainer
                 anchors.fill: parent
-                anchors.topMargin: 16
-                spacing: 4
 
-                // USB Drives header
+                // 1. HEADER (Fixed at Top)
                 Text {
-                    id: usbheader
+                    id: usbHeader
+                    anchors.top: parent.top
                     anchors.left: parent.left
+                    anchors.topMargin: 16
                     anchors.leftMargin: 20
                     text: "USB Drives"
                     font.pixelSize: Theme.fontSizeSmall
@@ -154,17 +155,55 @@ Item {
                     color: Theme.textSecondary
                 }
 
-                Item {
-                    width: 1
-                    height: 8
+                // 2. REFRESH BUTTON (Fixed at Bottom)
+                Rectangle {
+                    id: refreshBtn
+                    anchors.bottom: parent.bottom
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottomMargin: 10
+                    width: parent.width - 40 // Responsive width based on parent
+                    height: 36
+                    radius: 8
+                    color: refreshMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Refresh"
+                        font.pixelSize: Theme.fontSizeXSmall
+                        font.family: Theme.fontFamily
+                        color: Theme.textSecondary
+                    }
+
+                    MouseArea {
+                        id: refreshMouseArea
+                        anchors.fill: parent
+                        onClicked: {
+                            if (typeof fileBrowser !== "undefined")
+                                fileBrowser.refreshVolumes();
+                        }
+                    }
                 }
 
-                // Volume list
-                Repeater {
+                // 3. DRIVE LIST (Fills the middle space)
+                ListView {
+                    id: driveListView
+                    // Anchor top to header, bottom to refresh button
+                    anchors.top: usbHeader.bottom
+                    anchors.bottom: refreshBtn.top
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.topMargin: 10
+                    anchors.bottomMargin: 10
+
+                    // "clip: true" ensures items don't float over the header/footer when scrolling
+                    clip: true
+                    spacing: 0
+
                     model: typeof fileBrowser !== "undefined" ? fileBrowser.mountedVolumes : []
 
-                    Rectangle {
-                        width: driveSidebar.width
+
+                    delegate: Rectangle {
+                        width: driveListView.width
                         height: 60
                         color: {
                             if (typeof fileBrowser !== "undefined" && fileBrowser.currentVolumeName === modelData.name)
@@ -231,53 +270,19 @@ Item {
                     }
                 }
 
-                // No drives message
+                // 4. NO DRIVES MESSAGE (Centered in the empty list area)
                 Text {
-                    anchors.left: parent.left
-                    anchors.top: usbheader.bottom
-                    anchors.topMargin: 10
-                    anchors.leftMargin: 20
+                    anchors.centerIn: driveListView // Centers nicely in the middle area
                     text: "No USB drives\ndetected"
                     font.pixelSize: Theme.fontSizeSmall
                     font.family: Theme.fontFamily
                     font.weight: Font.Light
                     color: Theme.textMuted
                     lineHeight: 1.4
-                    visible: typeof fileBrowser === "undefined" || fileBrowser.mountedVolumes.length === 0
-                }
+                    horizontalAlignment: Text.AlignHCenter // Ensure 2 lines are centered relative to each other
 
-                // Spacer
-                Item {
-                    width: 1
-                    height: 16
-                }
-
-                // Refresh button
-                Rectangle {
-                    width: driveSidebar.width - 40
-                    height: 36
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 10
-                    radius: 8
-                    color: refreshMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Refresh"
-                        font.pixelSize: Theme.fontSizeXSmall
-                        font.family: Theme.fontFamily
-                        color: Theme.textSecondary
-                    }
-
-                    MouseArea {
-                        id: refreshMouseArea
-                        anchors.fill: parent
-                        onClicked: {
-                            if (typeof fileBrowser !== "undefined")
-                                fileBrowser.refreshVolumes();
-                        }
-                    }
+                    // Show if model is empty or undefined
+                    visible: driveListView.count === 0
                 }
             }
         }

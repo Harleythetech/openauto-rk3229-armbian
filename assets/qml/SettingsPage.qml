@@ -361,7 +361,7 @@ Item {
                 to: 300
                 stepSize: 10
                 value: typeof backend !== "undefined" ? backend.screenDPI : 160
-                onValueChanged: {
+                onMoved: {
                     if (typeof backend !== "undefined")
                         backend.setScreenDPI(value);
                 }
