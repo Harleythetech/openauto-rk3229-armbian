@@ -11,9 +11,9 @@ ApplicationWindow {
     id: mainWindow
 
     visible: true
-    //visibility: Window.FullScreen
-    width: 1024
-    height: 600
+    visibility: Window.FullScreen
+    //width: 1024
+    //height: 600
     title: "OpenAuto - " + width + "x" + height
     color: Theme.gradientTop
 
