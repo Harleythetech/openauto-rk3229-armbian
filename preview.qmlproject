@@ -1,0 +1,20 @@
+import QmlProject 1.3
+
+Project {
+    /* This is the magic part: it tells the previewer where to find images/fonts */
+    mainFile: "assets/qml/Main.qml"
+
+    /* Inclusion of all files in the assets directory */
+    QmlFiles {
+        directory: "assets"
+        recursive: true
+    }
+
+    ImageFiles {
+        directory: "assets"
+        recursive: true
+    }
+
+    /* This maps the local assets folder to the qrc:/ root */
+    importPaths: [ "assets" ]
+}

@@ -8,6 +8,7 @@ import "components"
 
 Item {
     id: root
+    objectName: "homePage"
 
     // Gradient background
     Rectangle {
@@ -60,7 +61,7 @@ Item {
             text: typeof backend !== "undefined" ? backend.currentDate : "January 1, 2026"
             font.pixelSize: Theme.fontSizeXLarge
             font.family: Theme.fontFamily
-            font.weight: Font.Light
+            font.weight: Font.ExtraLight
             color: Theme.textPrimary
         }
     }

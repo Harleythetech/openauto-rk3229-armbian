@@ -7,6 +7,7 @@ import "."
 
 Item {
     id: root
+    objectName: "musicPage"
 
     signal openFileBrowser
 
@@ -42,14 +43,40 @@ Item {
         }
         font.pixelSize: Theme.fontSizeLarge
         font.family: Theme.fontFamily
+        font.weight: Font.ExtraLight
+        color: Theme.textPrimary
+    }
+
+    // Back arrow (left side of album art)
+    Text {
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: 32
+        text: "‹"
+        font.pixelSize: 72
         font.weight: Font.Light
         color: Theme.textPrimary
+        opacity: 0.7
+
+        MouseArea {
+            anchors.fill: parent
+            anchors.margins: -20
+            onClicked: {
+                if (root.StackView.view)
+                    root.StackView.view.pop();
+            }
+        }
     }
 
     // Center content area — album art + track info side by side
     Row {
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: -40
+        // 1. Center Vertically only
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: -60
+
+        // 2. Anchor to the left side
+        anchors.left: parent.left
+        anchors.leftMargin: Math.max(100, parent.width * 0.15)
         spacing: 48
 
         // Album art — large (250x250)
@@ -57,29 +84,6 @@ Item {
             width: 250
             height: 250
             color: "transparent"
-            border.width: 2
-            border.color: Qt.rgba(1, 1, 1, 0.3)
-            radius: 8
-
-            // Placeholder CD icon
-            Rectangle {
-                anchors.centerIn: parent
-                width: 140
-                height: 140
-                radius: 70
-                color: "transparent"
-                border.width: 2
-                border.color: Qt.rgba(1, 1, 1, 0.3)
-                visible: albumArt.status !== Image.Ready
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: 36
-                    height: 36
-                    radius: 18
-                    color: Qt.rgba(1, 1, 1, 0.3)
-                }
-            }
 
             Image {
                 id: albumArt
@@ -87,7 +91,7 @@ Item {
                 source: {
                     if (typeof audioPlayer !== "undefined" && audioPlayer.albumArtPath !== "")
                         return audioPlayer.albumArtPath;
-                    return "";
+                    return Theme.imgPath + "album-hot.png";
                 }
                 fillMode: Image.PreserveAspectCrop
                 visible: status === Image.Ready
@@ -98,7 +102,7 @@ Item {
         Column {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 10
-            width: Math.min(root.width - 450, 380)
+            width: Math.min(root.width - 450, 450)
 
             // Track title
             Text {
@@ -144,50 +148,114 @@ Item {
                 color: Theme.textSecondary
                 elide: Text.ElideRight
             }
+        }
+    }
 
-            // Audio quality info (below artist)
-            Text {
-                width: parent.width
-                text: {
-                    var parts = [];
-                    if (typeof audioPlayer !== "undefined" && audioPlayer.playlistCount > 0)
-                        parts.push((audioPlayer.playlistIndex + 1) + " / " + audioPlayer.playlistCount);
-                    if (typeof audioPlayer !== "undefined" && audioPlayer.sampleRate > 0) {
-                        var rateKhz = (audioPlayer.sampleRate / 1000).toFixed(1) + "kHz";
-                        var depth = audioPlayer.bitDepth + "-bit";
-                        var quality = rateKhz + " / " + depth;
-                        if (audioPlayer.nativeOffload)
-                            quality += " · Offload";
-                        parts.push(quality);
-                    }
-                    return parts.join("   ·   ");
+    // Progress bar with time labels — above controls
+    Column {
+        id: progressArea
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: controlsRow.top
+        anchors.bottomMargin: 16
+
+        // CHANGE 1: Use full width minus margins (50px left + 50px right = 100)
+        width: parent.width - 300
+        spacing: 4
+
+        Slider {
+            id: progressSlider
+            width: parent.width
+            from: 0
+            to: typeof audioPlayer !== "undefined" ? Math.max(audioPlayer.duration, 1) : 1
+            enabled: typeof audioPlayer !== "undefined" && audioPlayer.playing
+
+            onMoved: {
+                if (typeof audioPlayer !== "undefined")
+                    audioPlayer.seek(value);
+            }
+
+            // Update position only when user is not dragging
+            Connections {
+                target: typeof audioPlayer !== "undefined" ? audioPlayer : null
+                function onPositionChanged() {
+                    if (!progressSlider.pressed)
+                        progressSlider.value = audioPlayer.position;
                 }
+            }
+
+            background: Rectangle {
+                x: progressSlider.leftPadding
+                y: progressSlider.topPadding + progressSlider.availableHeight / 2 - height / 2
+                width: progressSlider.availableWidth
+                height: 4
+                radius: 2
+                color: Qt.rgba(1, 1, 1, 0.15)
+
+                Rectangle {
+                    width: progressSlider.visualPosition * parent.width
+                    height: parent.height
+                    radius: 2
+                    color: Theme.primaryColor
+                }
+            }
+
+            handle: Rectangle {
+                x: progressSlider.leftPadding + progressSlider.visualPosition * (progressSlider.availableWidth - width)
+                y: progressSlider.topPadding + progressSlider.availableHeight / 2 - height / 2
+                width: 12
+                height: 12
+                radius: 6
+                color: "#FFFFFF"
+                visible: progressSlider.enabled
+            }
+        }
+
+        Row {
+            width: parent.width
+
+            Text {
+                id: elapsedTimeLabel
+                text: formatTime(progressSlider.value)
                 font.pixelSize: Theme.fontSizeXSmall
                 font.family: Theme.fontFamily
-                font.weight: Font.Light
                 color: Theme.textSecondary
-                visible: text !== ""
+            }
+            Item {
+                width: parent.width - elapsedTimeLabel.width - totalTimeLabel.width
+                height: 1
+            }
+            Text {
+                id: totalTimeLabel
+                text: formatTime(typeof audioPlayer !== "undefined" ? audioPlayer.duration : 0)
+                font.pixelSize: Theme.fontSizeXSmall
+                font.family: Theme.fontFamily
+                color: Theme.textSecondary
+                horizontalAlignment: Text.AlignRight
             }
         }
     }
 
     // Media controls row: Folder | Prev | Play/Pause | Next | Repeat
-    // Large controls matching design reference (~64px)
     Row {
         id: controlsRow
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 100
-        spacing: 64
+        anchors.bottomMargin: 50
 
-        // Folder button - opens file browser
+        // CHANGE 2: Match the width of the progress bar
+        width: parent.width - 300
+
+        // CHANGE 3: Use "SpaceBetween" logic instead of fixed spacing
+        // We set spacing to 0 and use "Item" spacers to push buttons apart evenly
+        spacing: 0
+
+        // 1. Folder Button
         Image {
             width: 48
             height: 48
-            source: "qrc:/File.png"
+            source: Theme.imgPath + "File.png"
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
-
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -20
@@ -195,88 +263,96 @@ Item {
             }
         }
 
-        // Previous button
+        // Spacer
+        Item {
+            width: (parent.width - (48 + 64 + 72 + 64 + 48)) / 4
+            height: 1
+        }
+
+        // 2. Previous Button
         Image {
             width: 64
             height: 64
-            source: "qrc:/prev-hot.png"
+            source: Theme.imgPath + "prev-hot.png"
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
-
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -15
-                onClicked: {
-                    if (typeof audioPlayer !== "undefined")
-                        audioPlayer.previousTrack();
-                }
+                onClicked: if (typeof audioPlayer !== "undefined")
+                    audioPlayer.previousTrack()
             }
         }
 
-        // Play/Pause button (largest)
+        // Spacer
+        Item {
+            width: (parent.width - (48 + 64 + 72 + 64 + 48)) / 4
+            height: 1
+        }
+
+        // 3. Play/Pause Button
         Image {
             width: 72
             height: 72
             source: {
                 if (typeof audioPlayer !== "undefined" && audioPlayer.playing)
-                    return "qrc:/pause-hot.png";
-                return "qrc:/play-hot.png";
+                    return Theme.imgPath + "pause-hot.png";
+                return Theme.imgPath + "play-hot.png";
             }
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
-
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -15
-                onClicked: {
-                    if (typeof audioPlayer !== "undefined")
-                        audioPlayer.togglePlayPause();
-                }
+                onClicked: if (typeof audioPlayer !== "undefined")
+                    audioPlayer.togglePlayPause()
             }
         }
 
-        // Next button
+        // Spacer
+        Item {
+            width: (parent.width - (48 + 64 + 72 + 64 + 48)) / 4
+            height: 1
+        }
+
+        // 4. Next Button
         Image {
             width: 64
             height: 64
-            source: "qrc:/next-hot.png"
+            source: Theme.imgPath + "next-hot.png"
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
-
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -15
-                onClicked: {
-                    if (typeof audioPlayer !== "undefined")
-                        audioPlayer.nextTrack();
-                }
+                onClicked: if (typeof audioPlayer !== "undefined")
+                    audioPlayer.nextTrack()
             }
         }
 
-        // Repeat button
+        // Spacer
+        Item {
+            width: (parent.width - (48 + 64 + 72 + 64 + 48)) / 4
+            height: 1
+        }
+
+        // 5. Repeat Button
         Image {
             width: 48
             height: 48
             source: {
                 if (typeof audioPlayer !== "undefined" && audioPlayer.repeatMode === 2)
-                    return "qrc:/Repeat1.png";
-                return "qrc:/Repeat.png";
+                    return Theme.imgPath + "Repeat1.png";
+                return Theme.imgPath + "Repeat.png";
             }
             fillMode: Image.PreserveAspectFit
             anchors.verticalCenter: parent.verticalCenter
-            opacity: {
-                if (typeof audioPlayer !== "undefined" && audioPlayer.repeatMode > 0)
-                    return 1.0;
-                return 0.5;
-            }
-
+            opacity: (typeof audioPlayer !== "undefined" && audioPlayer.repeatMode > 0) ? 1.0 : 0.5
             MouseArea {
                 anchors.fill: parent
                 anchors.margins: -20
-                onClicked: {
-                    if (typeof audioPlayer !== "undefined")
-                        audioPlayer.cycleRepeatMode();
-                }
+                onClicked: if (typeof audioPlayer !== "undefined")
+                    audioPlayer.cycleRepeatMode()
             }
         }
     }

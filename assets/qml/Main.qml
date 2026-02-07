@@ -11,14 +11,30 @@ ApplicationWindow {
     id: mainWindow
 
     visible: true
-    visibility: Window.FullScreen
-    title: "OpenAuto"
+    //visibility: Window.FullScreen
+    width: 1024
+    height: 600
+    title: "OpenAuto - " + width + "x" + height
     color: Theme.gradientTop
 
-    // Load Readex Pro font
+    // Load Readex Pro static fonts (variable font not supported on Qt 5.15)
     FontLoader {
-        id: readexProFont
-        source: "qrc:/ReadexPro-VariableFont_HEXP,wght.ttf"
+        source: Theme.imgPath + "font/ReadexPro-ExtraLight.ttf"
+    }
+    FontLoader {
+        source: Theme.imgPath + "font/ReadexPro-Light.ttf"
+    }
+    FontLoader {
+        source: Theme.imgPath + "font/ReadexPro-Regular.ttf"
+    }
+    FontLoader {
+        source: Theme.imgPath + "font/ReadexPro-Medium.ttf"
+    }
+    FontLoader {
+        source: Theme.imgPath + "font/ReadexPro-SemiBold.ttf"
+    }
+    FontLoader {
+        source: Theme.imgPath + "font/ReadexPro-Bold.ttf"
     }
 
     // No animations - instant transitions for low-end hardware
@@ -40,6 +56,26 @@ ApplicationWindow {
         replaceExit: null
 
         initialItem: homePageComponent
+
+        // Sync dock indicator whenever the active page changes
+        onCurrentItemChanged: {
+            if (!currentItem)
+                return;
+            switch (currentItem.objectName) {
+            case "homePage":
+                bottomDock.currentIndex = 0;
+                break;
+            case "musicPage":
+                bottomDock.currentIndex = 1;
+                break;
+            case "fileBrowserPage":
+                bottomDock.currentIndex = 1;
+                break;
+            case "settingsPage":
+                bottomDock.currentIndex = 4;
+                break;
+            }
+        }
     }
 
     // Bottom navigation dock
@@ -99,29 +135,40 @@ ApplicationWindow {
 
     // Functions for navigation (called from backend)
     function showHomePage() {
-        if (stackView.depth > 1) {
-            stackView.pop(null); // Pop to root
-        } else {
-            stackView.replace(homePageComponent);
-        }
+        if (stackView.depth > 1)
+            stackView.pop(null);
     }
 
     function showSettingsPage() {
+        if (stackView.currentItem && stackView.currentItem.objectName === "settingsPage")
+            return;
+        if (stackView.depth > 1)
+            stackView.pop(null);
         stackView.push(settingsPageComponent);
     }
 
     function showMusicPage() {
+        if (stackView.currentItem && stackView.currentItem.objectName === "musicPage")
+            return;
+        // If on FileBrowser (sub-page of Music), pop to reveal Music beneath
+        if (stackView.currentItem && stackView.currentItem.objectName === "fileBrowserPage") {
+            stackView.pop();
+            return;
+        }
+        if (stackView.depth > 1)
+            stackView.pop(null);
         stackView.push(musicPageComponent);
     }
 
     function showFileBrowserPage() {
+        if (stackView.currentItem && stackView.currentItem.objectName === "fileBrowserPage")
+            return;
         stackView.push(fileBrowserPageComponent);
     }
 
     function goBack() {
-        if (stackView.depth > 1) {
+        if (stackView.depth > 1)
             stackView.pop();
-        }
     }
 
     // Connection to handle backend signals

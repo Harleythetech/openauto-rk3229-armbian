@@ -7,9 +7,9 @@ import "."
 // Layout: Top bar (< Return | date/time), USB drive sidebar, full-width file list
 // When no volume selected: shows available USB drives list
 // When volume selected: breadcrumb header + folder/file listing
-
 Item {
     id: root
+    objectName: "fileBrowserPage"
 
     signal playFile(string filePath)
     signal playFolder(string folderPath)
@@ -18,7 +18,7 @@ Item {
     Component {
         id: folderIconComponent
         Image {
-            source: "qrc:/File.png"
+            source: Theme.imgPath + "File.png"
             fillMode: Image.PreserveAspectFit
         }
     }
@@ -52,13 +52,16 @@ Item {
             anchors.leftMargin: 24
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
-
             Text {
-                text: "<"
-                font.pixelSize: Theme.fontSizeLarge
+                text: "‹" // This is NOT the keyboard "<". It is Alt+0139
+                font.pixelSize: 48 // Make it larger than the text so it stands out
                 font.family: Theme.fontFamily
-                font.weight: Font.Light
+                font.weight: Font.Thin
                 color: Theme.textPrimary
+
+                // This forces the arrow to center perfectly with the word "Return"
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -4 // Slight lift because fonts usually render this glyph low
             }
             Text {
                 text: "Return"
@@ -66,6 +69,7 @@ Item {
                 font.family: Theme.fontFamily
                 font.weight: Font.Light
                 color: Theme.textPrimary
+                anchors.verticalCenter: parent.verticalCenter
             }
         }
 
@@ -96,7 +100,7 @@ Item {
             }
             font.pixelSize: Theme.fontSizeLarge
             font.family: Theme.fontFamily
-            font.weight: Font.Light
+            font.weight: Font.ExtraLight
             color: Theme.textPrimary
         }
     }
@@ -140,6 +144,7 @@ Item {
 
                 // USB Drives header
                 Text {
+                    id: usbheader
                     anchors.left: parent.left
                     anchors.leftMargin: 20
                     text: "USB Drives"
@@ -190,7 +195,7 @@ Item {
                             Image {
                                 width: 28
                                 height: 28
-                                source: "qrc:/USB.png"
+                                source: Theme.imgPath + "USB.png"
                                 fillMode: Image.PreserveAspectFit
                                 anchors.verticalCenter: parent.verticalCenter
                             }
@@ -229,6 +234,8 @@ Item {
                 // No drives message
                 Text {
                     anchors.left: parent.left
+                    anchors.top: usbheader.bottom
+                    anchors.topMargin: 10
                     anchors.leftMargin: 20
                     text: "No USB drives\ndetected"
                     font.pixelSize: Theme.fontSizeSmall
@@ -250,6 +257,8 @@ Item {
                     width: driveSidebar.width - 40
                     height: 36
                     anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 10
                     radius: 8
                     color: refreshMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.06)
 
@@ -289,9 +298,9 @@ Item {
 
                 Row {
                     anchors.left: parent.left
-                    anchors.leftMargin: 20
+                    anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 4
+                    spacing: 10
 
                     // Up button
                     Rectangle {
@@ -299,7 +308,7 @@ Item {
                         height: 32
                         radius: 6
                         color: upMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.05)
-                        visible: typeof fileBrowser !== "undefined" && fileBrowser.currentPath !== ""
+                        visible: (typeof fileBrowser !== "undefined") ? (fileBrowser.currentPath !== "") : true
 
                         Text {
                             anchors.centerIn: parent
@@ -323,6 +332,7 @@ Item {
                         model: typeof fileBrowser !== "undefined" ? fileBrowser.breadcrumb : []
 
                         Row {
+                            anchors.verticalCenter: parent.verticalCenter
                             spacing: 4
 
                             Text {
@@ -344,49 +354,11 @@ Item {
                     }
                 }
 
-                // Play All button (right side of breadcrumb)
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 20
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 100
-                    height: 36
-                    radius: 8
-                    color: playAllMouseArea.pressed ? Qt.darker("#2A5F8F", 1.2) : "#2A5F8F"
-                    visible: typeof fileBrowser !== "undefined" && fileBrowser.currentPath !== ""
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Play All"
-                        font.pixelSize: Theme.fontSizeSmall
-                        font.family: Theme.fontFamily
-                        color: "#FFFFFF"
-                    }
-
-                    MouseArea {
-                        id: playAllMouseArea
-                        anchors.fill: parent
-                        onClicked: {
-                            if (typeof fileBrowser !== "undefined" && typeof audioPlayer !== "undefined") {
-                                var files = fileBrowser.currentAudioFiles();
-                                if (files.length > 0) {
-                                    audioPlayer.setPlaylist(files);
-                                    audioPlayer.playIndex(0);
-                                    if (root.StackView.view)
-                                        root.StackView.view.pop();
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Bottom separator
                 Rectangle {
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left
                     anchors.right: parent.right
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 20
                     height: 1
                     color: Qt.rgba(1, 1, 1, 0.08)
                 }
@@ -437,7 +409,7 @@ Item {
                         Image {
                             width: 28
                             height: 28
-                            source: "qrc:/mp3-hot.png"
+                            source: Theme.imgPath + "mp3-hot.png"
                             fillMode: Image.PreserveAspectFit
                             anchors.verticalCenter: parent.verticalCenter
                             visible: !modelData.isDir

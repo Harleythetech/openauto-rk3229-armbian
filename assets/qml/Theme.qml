@@ -83,4 +83,12 @@ QtObject {
 
     // Transparency for overlays
     readonly property real overlayOpacity: 0.85
+
+    // Asset path resolver — works in both qrc:// (compiled) and local file (Design Studio/qmlscene)
+    readonly property string imgPath: {
+        var url = Qt.resolvedUrl(".");
+        if (url.toString().indexOf("qrc:") === 0)
+            return "qrc:/";
+        return url + "../";
+    }
 }

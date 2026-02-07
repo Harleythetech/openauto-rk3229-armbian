@@ -43,7 +43,12 @@
         <file>Repeat.png</file>
         <file>Repeat1.png</file>
         <file>Roboto-Regular.ttf</file>
-        <file>ReadexPro-VariableFont_HEXP,wght.ttf</file>
+        <file>font/ReadexPro-ExtraLight.ttf</file>
+        <file>font/ReadexPro-Light.ttf</file>
+        <file>font/ReadexPro-Regular.ttf</file>
+        <file>font/ReadexPro-Medium.ttf</file>
+        <file>font/ReadexPro-SemiBold.ttf</file>
+        <file>font/ReadexPro-Bold.ttf</file>
     </qresource>
     <qresource prefix="/qml">
         <file alias="Main.qml">qml/Main.qml</file>

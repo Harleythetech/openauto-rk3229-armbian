@@ -9,6 +9,7 @@ import "components"
 
 Item {
     id: root
+    objectName: "settingsPage"
 
     property int selectedCategory: 0
     property var categories: ["General", "Video", "Audio", "Input", "Bluetooth", "WiFi", "System", "About"]
@@ -51,10 +52,15 @@ Item {
                     spacing: 8
 
                     Text {
-                        text: "‹"
-                        font.pixelSize: Theme.fontSizeLarge
-                        font.weight: Font.Normal
+                        text: "‹" // This is NOT the keyboard "<". It is Alt+0139
+                        font.pixelSize: 48 // Make it larger than the text so it stands out
+                        font.family: Theme.fontFamily
+                        font.weight: Font.Thin
                         color: Theme.textPrimary
+
+                        // This forces the arrow to center perfectly with the word "Return"
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: -4 // Slight lift because fonts usually render this glyph low
                     }
 
                     Text {
@@ -63,6 +69,7 @@ Item {
                         font.family: Theme.fontFamily
                         font.weight: Font.Normal
                         color: Theme.textPrimary
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
 
@@ -70,8 +77,8 @@ Item {
                     id: returnMouseArea
                     anchors.fill: parent
                     onClicked: {
-                        if (typeof backend !== "undefined")
-                            backend.goBack();
+                        if (root.StackView.view)
+                            root.StackView.view.pop();
                     }
                 }
             }

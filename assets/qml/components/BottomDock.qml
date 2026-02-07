@@ -47,7 +47,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: Theme.dockIconSize
                 height: Theme.dockIconSize
-                source: "qrc:/home-hot.png"
+                source: Theme.imgPath + "home-hot.png"
                 fillMode: Image.PreserveAspectFit
                 opacity: root.currentIndex === 0 ? 1.0 : 0.7
             }
@@ -55,10 +55,7 @@ Rectangle {
             MouseArea {
                 id: homeMouseArea
                 anchors.fill: parent
-                onClicked: {
-                    root.currentIndex = 0;
-                    root.homeClicked();
-                }
+                onClicked: root.homeClicked()
             }
         }
 
@@ -80,7 +77,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: Theme.dockIconSize
                 height: Theme.dockIconSize
-                source: "qrc:/mp3-hot.png"
+                source: Theme.imgPath + "mp3-hot.png"
                 fillMode: Image.PreserveAspectFit
                 opacity: root.currentIndex === 1 ? 1.0 : 0.7
             }
@@ -88,10 +85,7 @@ Rectangle {
             MouseArea {
                 id: musicMouseArea
                 anchors.fill: parent
-                onClicked: {
-                    root.currentIndex = 1;
-                    root.musicClicked();
-                }
+                onClicked: root.musicClicked()
             }
         }
 
@@ -113,7 +107,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: Theme.dockIconSize
                 height: Theme.dockIconSize
-                source: "qrc:/Android_Auto_icon.png"
+                source: Theme.imgPath + "Android_Auto_icon.png"
                 fillMode: Image.PreserveAspectFit
                 opacity: root.currentIndex === 2 ? 1.0 : 0.7
             }
@@ -121,10 +115,7 @@ Rectangle {
             MouseArea {
                 id: aaMouseArea
                 anchors.fill: parent
-                onClicked: {
-                    root.currentIndex = 2;
-                    root.androidAutoClicked();
-                }
+                onClicked: root.androidAutoClicked()
             }
         }
 
@@ -146,7 +137,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: Theme.dockIconSize
                 height: Theme.dockIconSize
-                source: "qrc:/volume-hot.png"
+                source: Theme.imgPath + "volume-hot.png"
                 fillMode: Image.PreserveAspectFit
                 opacity: root.currentIndex === 3 ? 1.0 : 0.7
             }
@@ -154,10 +145,7 @@ Rectangle {
             MouseArea {
                 id: volumeMouseArea
                 anchors.fill: parent
-                onClicked: {
-                    root.currentIndex = 3;
-                    root.volumeClicked();
-                }
+                onClicked: root.volumeClicked()
             }
         }
 
@@ -179,7 +167,7 @@ Rectangle {
                 anchors.centerIn: parent
                 width: Theme.dockIconSize
                 height: Theme.dockIconSize
-                source: "qrc:/settings-hot.png"
+                source: Theme.imgPath + "settings-hot.png"
                 fillMode: Image.PreserveAspectFit
                 opacity: root.currentIndex === 4 ? 1.0 : 0.7
             }
@@ -187,10 +175,7 @@ Rectangle {
             MouseArea {
                 id: settingsMouseArea
                 anchors.fill: parent
-                onClicked: {
-                    root.currentIndex = 4;
-                    root.settingsClicked();
-                }
+                onClicked: root.settingsClicked()
             }
         }
     }

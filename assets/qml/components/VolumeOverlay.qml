@@ -54,7 +54,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 28
             height: 28
-            source: "qrc:/volume-hot.png"
+            source: Theme.imgPath + "volume-hot.png"
             fillMode: Image.PreserveAspectFit
         }
 
