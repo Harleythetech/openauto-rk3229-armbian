@@ -107,15 +107,18 @@ endif ()
 if (USE_FFMPEG_DRM)
     message(STATUS "Configuring with FFmpeg DRM hwaccel + DRM Prime output (lowest latency)")
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBAV REQUIRED libavcodec libavformat libavutil libswscale)
+    pkg_check_modules(LIBAV REQUIRED libavcodec libavformat libavutil libswscale libswresample)
     pkg_check_modules(LIBDRM REQUIRED libdrm)
+    pkg_check_modules(ALSA REQUIRED alsa)
     add_definitions(-DUSE_FFMPEG_DRM)
     set(FFMPEG_INCLUDE_DIRS ${LIBAV_INCLUDE_DIRS} ${LIBDRM_INCLUDE_DIRS})
     set(FFMPEG_LIBRARIES ${LIBAV_LIBRARIES} ${LIBDRM_LIBRARIES})
     message(STATUS "FFmpeg libavcodec version: ${LIBAV_libavcodec_VERSION}")
     message(STATUS "FFmpeg libswscale version: ${LIBAV_libswscale_VERSION}")
+    message(STATUS "FFmpeg libswresample version: ${LIBAV_libswresample_VERSION}")
     message(STATUS "FFmpeg include dirs: ${FFMPEG_INCLUDE_DIRS}")
     message(STATUS "FFmpeg libraries: ${FFMPEG_LIBRARIES}")
+    message(STATUS "ALSA version: ${ALSA_VERSION}")
     message(STATUS "libdrm version: ${LIBDRM_VERSION}")
 endif ()
 
@@ -161,6 +164,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}
         ${BCM_HOST_INCLUDE_DIRS}
         ${ILCLIENT_INCLUDE_DIRS}
         ${FFMPEG_INCLUDE_DIRS}
+        ${ALSA_INCLUDE_DIRS}
         ${include_directory}
         ${PROTOBUF_INCLUDE_DIR}
         ${AAP_PROTOBUF_INCLUDE_DIR}
@@ -193,6 +197,7 @@ target_link_libraries(autoapp PUBLIC
         ${BCM_HOST_LIBRARIES}
         ${ILCLIENT_LIBRARIES}
         ${FFMPEG_LIBRARIES}
+        ${ALSA_LIBRARIES}
         ${WINSOCK2_LIBRARIES}
         ${RTAUDIO_LIBRARIES}
         ${TAGLIB_LIBRARIES}
@@ -378,7 +383,7 @@ set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/opencardev/openauto")
 if (USE_FFMPEG_DRM)
     # Target FFmpeg 5.1 (Debian Bookworm) dependencies for the RK3229
     # Qt Quick/QML dependencies added for the new QML-based UI
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libavcodec59, libavutil57, libswscale6, libswresample4, libdrm2, libqt5gui5, libqt5multimedia5, libqt5multimedia5-plugins, libqt5quick5, libqt5qml5, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libavcodec59, libavutil57, libswscale6, libswresample4, libdrm2, libasound2, libqt5gui5, libqt5multimedia5, libqt5multimedia5-plugins, libqt5quick5, libqt5qml5, qml-module-qtquick2, qml-module-qtquick-controls2, qml-module-qtquick-window2, qml-module-qtquick-layouts, qml-module-qtgraphicaleffects, libtag1v5")
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
 else()
     # Fallback for standard builds

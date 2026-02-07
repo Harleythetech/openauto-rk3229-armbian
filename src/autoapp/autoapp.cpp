@@ -37,6 +37,8 @@
 #include <f1x/openauto/autoapp/Service/AndroidAutoEntityFactory.hpp>
 #include <f1x/openauto/autoapp/Service/ServiceFactory.hpp>
 #include <f1x/openauto/autoapp/UI/UIBackend.hpp>
+#include <f1x/openauto/autoapp/Player/AudioPlayer.hpp>
+#include <f1x/openauto/autoapp/Player/FileBrowserBackend.hpp>
 #include <thread>
 
 namespace autoapp = f1x::openauto::autoapp;
@@ -188,11 +190,32 @@ int main(int argc, char *argv[])
   // Create UI backend for QML
   auto uiBackend = new autoapp::ui::UIBackend(configuration);
 
+  // Create music player and file browser
+  auto audioPlayer = new autoapp::player::AudioPlayer();
+  auto fileBrowser = new autoapp::player::FileBrowserBackend();
+
+  // Connect audioPlayer state to UIBackend music properties
+  QObject::connect(audioPlayer, &autoapp::player::AudioPlayer::trackChanged,
+                   [uiBackend, audioPlayer]()
+                   {
+                     uiBackend->setTrackTitle(audioPlayer->trackTitle());
+                     uiBackend->setAlbumName(audioPlayer->albumName());
+                     uiBackend->setArtistName(audioPlayer->artistName());
+                     uiBackend->setAlbumArtPath(audioPlayer->albumArtPath());
+                   });
+  QObject::connect(audioPlayer, &autoapp::player::AudioPlayer::playbackStateChanged,
+                   [uiBackend, audioPlayer]()
+                   {
+                     uiBackend->setIsPlaying(audioPlayer->isPlaying());
+                   });
+
   // Create QML engine
   QQmlApplicationEngine engine;
 
   // Expose backend to QML
   engine.rootContext()->setContextProperty("backend", uiBackend);
+  engine.rootContext()->setContextProperty("audioPlayer", audioPlayer);
+  engine.rootContext()->setContextProperty("fileBrowser", fileBrowser);
   engine.rootContext()->setContextProperty("screenWidth", width);
   engine.rootContext()->setContextProperty("screenHeight", height);
 
@@ -270,6 +293,8 @@ int main(int argc, char *argv[])
   std::for_each(threadPool.begin(), threadPool.end(),
                 std::bind(&std::thread::join, std::placeholders::_1));
 
+  delete fileBrowser;
+  delete audioPlayer;
   delete uiBackend;
   libusb_exit(usbContext);
   return result;

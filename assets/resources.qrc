@@ -38,6 +38,11 @@
         <file>coverlogo.png</file>
         <file>black.png</file>
         <file>album-hot.png</file>
+        <file>Android_Auto_icon.svg</file>
+        <file>Folder.svg</file>
+        <file>USB.svg</file>
+        <file>Repeat.svg</file>
+        <file>Repeat1.svg</file>
         <file>Roboto-Regular.ttf</file>
         <file>ReadexPro-VariableFont_HEXP,wght.ttf</file>
     </qresource>
@@ -52,5 +57,7 @@
         <file alias="components/StatusBar.qml">qml/components/StatusBar.qml</file>
         <file alias="components/SettingsCard.qml">qml/components/SettingsCard.qml</file>
         <file alias="components/BottomDock.qml">qml/components/BottomDock.qml</file>
+        <file alias="components/VolumeOverlay.qml">qml/components/VolumeOverlay.qml</file>
+        <file alias="FileBrowserPage.qml">qml/FileBrowserPage.qml</file>
     </qresource>
 </RCC>

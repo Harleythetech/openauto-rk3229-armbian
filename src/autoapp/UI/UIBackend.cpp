@@ -20,7 +20,9 @@
 #include <QFile>
 #include <QProcess>
 #include <QCoreApplication>
+#include <QGuiApplication>
 #include <QNetworkInterface>
+#include <QCursor>
 #include <sys/sysinfo.h>
 #include <f1x/openauto/autoapp/UI/UIBackend.hpp>
 #include <f1x/openauto/Common/Log.hpp>
@@ -36,7 +38,7 @@ namespace f1x
 
                 UIBackend::UIBackend(configuration::IConfiguration::Pointer configuration,
                                      QObject *parent)
-                    : QObject(parent), configuration_(std::move(configuration)), clockTimer_(new QTimer(this)), systemInfoTimer_(new QTimer(this)), currentTime_("00:00"), networkSSID_(""), wifiIP_(""), bluetoothConnected_(false), wifiConnected_(false), brightness_(50), volume_(80), use24HourFormat_(true), freeMemory_("N/A"), cpuFrequency_("N/A"), cpuTemperature_("N/A"), disconnectTimeout_(60), shutdownTimeout_(0), disableShutdown_(false), disableScreenOff_(false), debugMode_(false), hotspotEnabled_(false), bluetoothAutoPair_(false), trackTitle_(""), albumName_(""), artistName_(""), albumArtPath_(""), isPlaying_(false)
+                    : QObject(parent), configuration_(std::move(configuration)), clockTimer_(new QTimer(this)), systemInfoTimer_(new QTimer(this)), currentTime_("00:00"), networkSSID_(""), networkConnectionType_("Not Connected"), wifiIP_(""), bluetoothConnected_(false), wifiConnected_(false), brightness_(50), volume_(80), use24HourFormat_(true), freeMemory_("N/A"), cpuFrequency_("N/A"), cpuTemperature_("N/A"), disconnectTimeout_(60), shutdownTimeout_(0), disableShutdown_(false), disableScreenOff_(false), debugMode_(false), hotspotEnabled_(false), bluetoothAutoPair_(false), trackTitle_(""), albumName_(""), artistName_(""), albumArtPath_(""), isPlaying_(false)
                 {
                     // Update clock every second
                     connect(clockTimer_, &QTimer::timeout, this, &UIBackend::updateClock);
@@ -76,6 +78,9 @@ namespace f1x
                     }
 
                     OPENAUTO_LOG(info) << "[UIBackend] Initialized with full property support";
+
+                    // Enumerate audio devices
+                    enumerateAudioDevices();
                 }
 
                 UIBackend::~UIBackend()
@@ -115,6 +120,11 @@ namespace f1x
                 QString UIBackend::networkSSID() const
                 {
                     return networkSSID_;
+                }
+
+                QString UIBackend::networkConnectionType() const
+                {
+                    return networkConnectionType_;
                 }
 
                 bool UIBackend::bluetoothConnected() const
@@ -266,6 +276,16 @@ namespace f1x
                         return "Default";
                     std::string device = configuration_->getAudioInputDeviceName();
                     return device.empty() ? "Default" : QString::fromStdString(device);
+                }
+
+                QStringList UIBackend::audioOutputDevices() const
+                {
+                    return audioOutputDevices_;
+                }
+
+                QStringList UIBackend::audioInputDevices() const
+                {
+                    return audioInputDevices_;
                 }
 
                 bool UIBackend::musicChannelEnabled() const
@@ -459,6 +479,13 @@ namespace f1x
                     {
                         configuration_->showCursor(value);
                         configuration_->save();
+
+                        // Apply cursor visibility at runtime
+                        if (value)
+                            QGuiApplication::restoreOverrideCursor();
+                        else
+                            QGuiApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
+
                         emit settingsChanged();
                     }
                 }
@@ -593,6 +620,28 @@ namespace f1x
                         configuration_->setTelephonyAudioChannelEnabled(value);
                         configuration_->save();
                         emit settingsChanged();
+                    }
+                }
+
+                void UIBackend::setAudioOutputDevice(const QString &device)
+                {
+                    if (configuration_)
+                    {
+                        configuration_->setAudioOutputDeviceName(device.toStdString());
+                        configuration_->save();
+                        emit settingsChanged();
+                        OPENAUTO_LOG(info) << "[UIBackend] Audio output device set to: " << device.toStdString();
+                    }
+                }
+
+                void UIBackend::setAudioInputDevice(const QString &device)
+                {
+                    if (configuration_)
+                    {
+                        configuration_->setAudioInputDeviceName(device.toStdString());
+                        configuration_->save();
+                        emit settingsChanged();
+                        OPENAUTO_LOG(info) << "[UIBackend] Audio input device set to: " << device.toStdString();
                     }
                 }
 
@@ -913,7 +962,150 @@ namespace f1x
                         tempFile.close();
                     }
 
+                    // Network status polling
+                    QString newConnectionType = "Not Connected";
+                    QString newIP = "N/A";
+                    QString newSSID = "";
+                    bool newWifiConnected = false;
+
+                    // Check eth0 first
+                    QNetworkInterface eth0 = QNetworkInterface::interfaceFromName("eth0");
+                    if (eth0.isValid() && (eth0.flags() & QNetworkInterface::IsUp) && (eth0.flags() & QNetworkInterface::IsRunning))
+                    {
+                        const auto entries = eth0.addressEntries();
+                        for (const auto &entry : entries)
+                        {
+                            if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol && !entry.ip().isLoopback())
+                            {
+                                newConnectionType = "Ethernet";
+                                newIP = entry.ip().toString();
+                                break;
+                            }
+                        }
+                    }
+
+                    // Check wlan0
+                    QNetworkInterface wlan0 = QNetworkInterface::interfaceFromName("wlan0");
+                    if (wlan0.isValid() && (wlan0.flags() & QNetworkInterface::IsUp) && (wlan0.flags() & QNetworkInterface::IsRunning))
+                    {
+                        const auto entries = wlan0.addressEntries();
+                        for (const auto &entry : entries)
+                        {
+                            if (entry.ip().protocol() == QAbstractSocket::IPv4Protocol && !entry.ip().isLoopback())
+                            {
+                                if (newConnectionType == "Not Connected")
+                                {
+                                    newConnectionType = "WiFi";
+                                    newIP = entry.ip().toString();
+                                }
+                                else
+                                {
+                                    newConnectionType = "Ethernet + WiFi";
+                                }
+                                newWifiConnected = true;
+                                break;
+                            }
+                        }
+
+                        // Try to read WiFi SSID
+                        QFile ssidFile("/tmp/wifi_ssid");
+                        if (ssidFile.open(QIODevice::ReadOnly))
+                        {
+                            newSSID = QString::fromUtf8(ssidFile.readAll()).trimmed();
+                            ssidFile.close();
+                        }
+                        if (newSSID.isEmpty())
+                        {
+                            QProcess iwgetid;
+                            iwgetid.start("iwgetid", QStringList() << "-r");
+                            if (iwgetid.waitForFinished(500))
+                                newSSID = QString::fromUtf8(iwgetid.readAllStandardOutput()).trimmed();
+                        }
+                    }
+
+                    bool networkChanged = false;
+                    if (networkConnectionType_ != newConnectionType)
+                    {
+                        networkConnectionType_ = newConnectionType;
+                        networkChanged = true;
+                    }
+                    if (wifiIP_ != newIP)
+                    {
+                        wifiIP_ = newIP;
+                        networkChanged = true;
+                    }
+                    if (networkSSID_ != newSSID)
+                    {
+                        networkSSID_ = newSSID;
+                        networkChanged = true;
+                    }
+                    if (wifiConnected_ != newWifiConnected)
+                    {
+                        wifiConnected_ = newWifiConnected;
+                        networkChanged = true;
+                    }
+
                     emit systemInfoChanged();
+                    if (networkChanged)
+                        emit this->networkChanged();
+                }
+
+                void UIBackend::enumerateAudioDevices()
+                {
+                    audioOutputDevices_.clear();
+                    audioInputDevices_.clear();
+                    audioOutputDevices_ << "Default";
+                    audioInputDevices_ << "Default";
+
+                    // Parse aplay -l for output devices
+                    QProcess aplay;
+                    aplay.start("aplay", QStringList() << "-l");
+                    if (aplay.waitForFinished(2000))
+                    {
+                        QString output = QString::fromUtf8(aplay.readAllStandardOutput());
+                        const QStringList lines = output.split('\n');
+                        for (const QString &line : lines)
+                        {
+                            if (line.startsWith("card "))
+                            {
+                                // Extract "card N: NAME [DESC], device M: ..."
+                                int colonPos = line.indexOf(':');
+                                int commaPos = line.indexOf(',');
+                                if (colonPos > 0 && commaPos > colonPos)
+                                {
+                                    QString cardName = line.mid(colonPos + 2, commaPos - colonPos - 2).trimmed();
+                                    if (!audioOutputDevices_.contains(cardName))
+                                        audioOutputDevices_ << cardName;
+                                }
+                            }
+                        }
+                    }
+
+                    // Parse arecord -l for input devices
+                    QProcess arecord;
+                    arecord.start("arecord", QStringList() << "-l");
+                    if (arecord.waitForFinished(2000))
+                    {
+                        QString output = QString::fromUtf8(arecord.readAllStandardOutput());
+                        const QStringList lines = output.split('\n');
+                        for (const QString &line : lines)
+                        {
+                            if (line.startsWith("card "))
+                            {
+                                int colonPos = line.indexOf(':');
+                                int commaPos = line.indexOf(',');
+                                if (colonPos > 0 && commaPos > colonPos)
+                                {
+                                    QString cardName = line.mid(colonPos + 2, commaPos - colonPos - 2).trimmed();
+                                    if (!audioInputDevices_.contains(cardName))
+                                        audioInputDevices_ << cardName;
+                                }
+                            }
+                        }
+                    }
+
+                    OPENAUTO_LOG(info) << "[UIBackend] Found " << audioOutputDevices_.size() << " output devices, " << audioInputDevices_.size() << " input devices";
+                    emit audioDevicesChanged();
                 }
 
             } // namespace ui

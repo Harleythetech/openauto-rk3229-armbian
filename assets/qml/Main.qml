@@ -56,8 +56,16 @@ ApplicationWindow {
             if (typeof backend !== "undefined")
                 backend.startAndroidAutoUSB();
         }
-        onVolumeClicked: { /* Future: volume popup */ }
+        onVolumeClicked: volumeOverlay.toggle()
         onSettingsClicked: showSettingsPage()
+    }
+
+    // Volume overlay (floats above dock)
+    VolumeOverlay {
+        id: volumeOverlay
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: bottomDock.top
+        anchors.bottomMargin: 8
     }
 
     // Home page component
@@ -72,13 +80,21 @@ ApplicationWindow {
     // Music player page component
     Component {
         id: musicPageComponent
-        MusicPage {}
+        MusicPage {
+            onOpenFileBrowser: showFileBrowserPage()
+        }
     }
 
     // Settings page component (loaded on demand)
     Component {
         id: settingsPageComponent
         SettingsPage {}
+    }
+
+    // File browser page component
+    Component {
+        id: fileBrowserPageComponent
+        FileBrowserPage {}
     }
 
     // Functions for navigation (called from backend)
@@ -96,6 +112,10 @@ ApplicationWindow {
 
     function showMusicPage() {
         stackView.push(musicPageComponent);
+    }
+
+    function showFileBrowserPage() {
+        stackView.push(fileBrowserPageComponent);
     }
 
     function goBack() {

@@ -20,6 +20,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <memory>
 #include <f1x/openauto/autoapp/Configuration/IConfiguration.hpp>
@@ -51,6 +52,7 @@ namespace f1x
 
                     // ========== Network/Status Properties ==========
                     Q_PROPERTY(QString networkSSID READ networkSSID NOTIFY networkChanged)
+                    Q_PROPERTY(QString networkConnectionType READ networkConnectionType NOTIFY networkChanged)
                     Q_PROPERTY(bool bluetoothConnected READ bluetoothConnected NOTIFY bluetoothChanged)
                     Q_PROPERTY(bool wifiConnected READ wifiConnected NOTIFY networkChanged)
                     Q_PROPERTY(QString wifiIP READ wifiIP NOTIFY networkChanged)
@@ -77,6 +79,8 @@ namespace f1x
                     // ========== Audio Settings ==========
                     Q_PROPERTY(QString audioOutputDevice READ audioOutputDevice NOTIFY settingsChanged)
                     Q_PROPERTY(QString audioInputDevice READ audioInputDevice NOTIFY settingsChanged)
+                    Q_PROPERTY(QStringList audioOutputDevices READ audioOutputDevices NOTIFY audioDevicesChanged)
+                    Q_PROPERTY(QStringList audioInputDevices READ audioInputDevices NOTIFY audioDevicesChanged)
                     Q_PROPERTY(bool musicChannelEnabled READ musicChannelEnabled WRITE setMusicChannelEnabled NOTIFY settingsChanged)
                     Q_PROPERTY(bool guidanceChannelEnabled READ guidanceChannelEnabled WRITE setGuidanceChannelEnabled NOTIFY settingsChanged)
                     Q_PROPERTY(bool telephonyChannelEnabled READ telephonyChannelEnabled WRITE setTelephonyChannelEnabled NOTIFY settingsChanged)
@@ -130,6 +134,7 @@ namespace f1x
 
                     // ========== Network/Status Getters ==========
                     QString networkSSID() const;
+                    QString networkConnectionType() const;
                     bool bluetoothConnected() const;
                     bool wifiConnected() const;
                     QString wifiIP() const;
@@ -156,6 +161,8 @@ namespace f1x
                     // ========== Audio Settings Getters ==========
                     QString audioOutputDevice() const;
                     QString audioInputDevice() const;
+                    QStringList audioOutputDevices() const;
+                    QStringList audioInputDevices() const;
                     bool musicChannelEnabled() const;
                     bool guidanceChannelEnabled() const;
                     bool telephonyChannelEnabled() const;
@@ -213,6 +220,8 @@ namespace f1x
                     Q_INVOKABLE void setMusicChannelEnabled(bool value);
                     Q_INVOKABLE void setGuidanceChannelEnabled(bool value);
                     Q_INVOKABLE void setTelephonyChannelEnabled(bool value);
+                    Q_INVOKABLE void setAudioOutputDevice(const QString &device);
+                    Q_INVOKABLE void setAudioInputDevice(const QString &device);
                     Q_INVOKABLE void setTouchscreenEnabled(bool value);
                     Q_INVOKABLE void setPlayerButtonControl(bool value);
                     Q_INVOKABLE void setBluetoothAutoPair(bool value);
@@ -267,6 +276,7 @@ namespace f1x
                     void volumeChanged();
                     void settingsChanged();
                     void systemInfoChanged();
+                    void audioDevicesChanged();
                     void musicChanged();
 
                     // Navigation signals
@@ -293,6 +303,7 @@ namespace f1x
                 private slots:
                     void updateClock();
                     void updateSystemInfo();
+                    void enumerateAudioDevices();
 
                 private:
                     configuration::IConfiguration::Pointer configuration_;
@@ -302,12 +313,17 @@ namespace f1x
                     // Cached values
                     QString currentTime_;
                     QString networkSSID_;
+                    QString networkConnectionType_;
                     QString wifiIP_;
                     bool bluetoothConnected_;
                     bool wifiConnected_;
                     int brightness_;
                     int volume_;
                     bool use24HourFormat_;
+
+                    // Audio device lists
+                    QStringList audioOutputDevices_;
+                    QStringList audioInputDevices_;
 
                     // System info cache
                     QString freeMemory_;

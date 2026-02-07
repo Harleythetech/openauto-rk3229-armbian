@@ -40,7 +40,7 @@ Rectangle {
                     action: "music"
                 },
                 {
-                    icon: "qrc:/aausb-hot.png",
+                    icon: "qrc:/Android_Auto_icon.svg",
                     action: "aa"
                 },
                 {

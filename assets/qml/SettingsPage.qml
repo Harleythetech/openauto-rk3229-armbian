@@ -219,43 +219,11 @@ Item {
                 }
             }
             SettingToggle {
-                label: "Show Clock"
-                checked: typeof backend !== "undefined" ? backend.showClock : true
-                onToggled: function (value) {
-                    if (typeof backend !== "undefined")
-                        backend.setShowClock(value);
-                }
-            }
-            SettingToggle {
-                label: "Show Big Clock"
-                checked: typeof backend !== "undefined" ? backend.showBigClock : false
-                onToggled: function (value) {
-                    if (typeof backend !== "undefined")
-                        backend.setShowBigClock(value);
-                }
-            }
-            SettingToggle {
                 label: "Show Cursor"
                 checked: typeof backend !== "undefined" ? backend.showCursor : false
                 onToggled: function (value) {
                     if (typeof backend !== "undefined")
                         backend.setShowCursor(value);
-                }
-            }
-            SettingToggle {
-                label: "Hide Warning"
-                checked: typeof backend !== "undefined" ? backend.hideWarning : false
-                onToggled: function (value) {
-                    if (typeof backend !== "undefined")
-                        backend.setHideWarning(value);
-                }
-            }
-            SettingToggle {
-                label: "Hide Menu Toggle"
-                checked: typeof backend !== "undefined" ? backend.hideMenuToggle : false
-                onToggled: function (value) {
-                    if (typeof backend !== "undefined")
-                        backend.setHideMenuToggle(value);
                 }
             }
             SettingToggle {
@@ -273,44 +241,15 @@ Item {
             }
 
             Text {
-                text: "UI Transparency"
+                text: "UI Layout"
                 font.pixelSize: Theme.fontSizeSmall
-                color: Theme.textSecondary
-            }
-            Row {
-                width: parent.width
-                spacing: Theme.spacing
-                Slider {
-                    width: parent.width - 60
-                    from: 0
-                    to: 100
-                    value: typeof backend !== "undefined" ? backend.alphaTrans : 100
-                    onValueChanged: {
-                        if (typeof backend !== "undefined")
-                            backend.setAlphaTrans(value);
-                    }
-                }
-                Text {
-                    text: Math.round(typeof backend !== "undefined" ? backend.alphaTrans : 100) + "%"
-                    color: Theme.textPrimary
-                    font.pixelSize: Theme.fontSizeSmall
-                }
-            }
-
-            Item {
-                width: 1
-                height: Theme.spacing
-            }
-
-            Text {
-                text: "Traffic Handedness"
-                font.pixelSize: Theme.fontSizeSmall
+                font.family: Theme.fontFamily
                 color: Theme.textSecondary
             }
             Row {
                 spacing: Theme.spacing
                 SettingRadio {
-                    text: "Left Hand Drive"
+                    text: "LHD"
                     checked: typeof backend !== "undefined" ? backend.leftHandDrive : true
                     onClicked: {
                         if (typeof backend !== "undefined")
@@ -318,7 +257,7 @@ Item {
                     }
                 }
                 SettingRadio {
-                    text: "Right Hand Drive"
+                    text: "RHD"
                     checked: typeof backend !== "undefined" ? !backend.leftHandDrive : false
                     onClicked: {
                         if (typeof backend !== "undefined")
@@ -420,24 +359,6 @@ Item {
                         backend.setScreenDPI(value);
                 }
             }
-
-            Item {
-                width: 1
-                height: Theme.spacing
-            }
-
-            SettingRow {
-                label: "Video Margin Width"
-                value: typeof backend !== "undefined" ? backend.videoMarginWidth + "px" : "0px"
-            }
-            SettingRow {
-                label: "Video Margin Height"
-                value: typeof backend !== "undefined" ? backend.videoMarginHeight + "px" : "0px"
-            }
-            SettingRow {
-                label: "OMX Layer Index"
-                value: typeof backend !== "undefined" ? backend.omxLayerIndex.toString() : "0"
-            }
         }
     }
 
@@ -448,13 +369,189 @@ Item {
             spacing: Theme.spacingSmall
             width: parent.width
 
-            SettingRow {
-                label: "Output Device"
-                value: typeof backend !== "undefined" ? backend.audioOutputDevice : "Default"
+            Text {
+                text: "Output Device"
+                font.pixelSize: Theme.fontSizeSmall
+                font.family: Theme.fontFamily
+                color: Theme.textSecondary
             }
-            SettingRow {
-                label: "Input Device"
-                value: typeof backend !== "undefined" ? backend.audioInputDevice : "Default"
+            Rectangle {
+                width: Math.min(parent.width - Theme.spacing, 400)
+                height: 40
+                radius: 8
+                color: Qt.rgba(1, 1, 1, 0.1)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.2)
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: typeof backend !== "undefined" ? backend.audioOutputDevice : "Default"
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.family: Theme.fontFamily
+                    color: Theme.textPrimary
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "▼"
+                    font.pixelSize: 12
+                    color: Theme.textSecondary
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: outputDeviceMenu.open()
+                }
+
+                // Dropdown menu
+                Popup {
+                    id: outputDeviceMenu
+                    y: parent.height + 2
+                    width: parent.width
+                    padding: 0
+                    background: Rectangle {
+                        color: "#1A1F2E"
+                        radius: 8
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.2)
+                    }
+                    contentItem: Column {
+                        Repeater {
+                            model: typeof backend !== "undefined" ? backend.audioOutputDevices : ["Default"]
+                            Rectangle {
+                                width: outputDeviceMenu.width
+                                height: 36
+                                color: odMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.15) : "transparent"
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.family: Theme.fontFamily
+                                    color: Theme.textPrimary
+                                }
+                                MouseArea {
+                                    id: odMouseArea
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        if (typeof backend !== "undefined")
+                                            backend.setAudioOutputDevice(modelData);
+                                        outputDeviceMenu.close();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item {
+                width: 1
+                height: Theme.spacingSmall
+            }
+
+            Text {
+                text: "Input Device"
+                font.pixelSize: Theme.fontSizeSmall
+                font.family: Theme.fontFamily
+                color: Theme.textSecondary
+            }
+            Rectangle {
+                width: Math.min(parent.width - Theme.spacing, 400)
+                height: 40
+                radius: 8
+                color: Qt.rgba(1, 1, 1, 0.1)
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.2)
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: typeof backend !== "undefined" ? backend.audioInputDevice : "Default"
+                    font.pixelSize: Theme.fontSizeSmall
+                    font.family: Theme.fontFamily
+                    color: Theme.textPrimary
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "▼"
+                    font.pixelSize: 12
+                    color: Theme.textSecondary
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: inputDeviceMenu.open()
+                }
+
+                Popup {
+                    id: inputDeviceMenu
+                    y: parent.height + 2
+                    width: parent.width
+                    padding: 0
+                    background: Rectangle {
+                        color: "#1A1F2E"
+                        radius: 8
+                        border.width: 1
+                        border.color: Qt.rgba(1, 1, 1, 0.2)
+                    }
+                    contentItem: Column {
+                        Repeater {
+                            model: typeof backend !== "undefined" ? backend.audioInputDevices : ["Default"]
+                            Rectangle {
+                                width: inputDeviceMenu.width
+                                height: 36
+                                color: idMouseArea.pressed ? Qt.rgba(1, 1, 1, 0.15) : "transparent"
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 12
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.family: Theme.fontFamily
+                                    color: Theme.textPrimary
+                                }
+                                MouseArea {
+                                    id: idMouseArea
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        if (typeof backend !== "undefined")
+                                            backend.setAudioInputDevice(modelData);
+                                        inputDeviceMenu.close();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Item {
+                width: 1
+                height: Theme.spacing
+            }
+
+            Text {
+                text: "Volume: " + (typeof backend !== "undefined" ? backend.volume : 80) + "%"
+                font.pixelSize: Theme.fontSizeSmall
+                font.family: Theme.fontFamily
+                color: Theme.textSecondary
+            }
+            Slider {
+                width: Math.min(parent.width - Theme.spacing * 2, 400)
+                from: 0
+                to: 100
+                stepSize: 1
+                value: typeof backend !== "undefined" ? backend.volume : 80
+                onValueChanged: {
+                    if (typeof backend !== "undefined")
+                        backend.setVolume(value);
+                }
             }
 
             Item {
@@ -465,6 +562,7 @@ Item {
             Text {
                 text: "Audio Channels"
                 font.pixelSize: Theme.fontSizeMedium
+                font.family: Theme.fontFamily
                 font.bold: true
                 color: Theme.textPrimary
             }
@@ -674,9 +772,9 @@ Item {
             width: parent.width
 
             SettingRow {
-                label: "Status"
-                value: typeof backend !== "undefined" && backend.wifiConnected ? "Connected" : "Not Connected"
-                valueColor: typeof backend !== "undefined" && backend.wifiConnected ? Theme.successColor : Theme.textSecondary
+                label: "Connection"
+                value: typeof backend !== "undefined" ? backend.networkConnectionType : "Not Connected"
+                valueColor: typeof backend !== "undefined" && backend.networkConnectionType !== "Not Connected" ? Theme.successColor : Theme.textSecondary
             }
 
             SettingRow {
@@ -768,14 +866,6 @@ Item {
                         backend.setDisableScreenOff(value);
                 }
             }
-            SettingToggle {
-                label: "Debug Mode"
-                checked: typeof backend !== "undefined" ? backend.debugMode : false
-                onToggled: function (value) {
-                    if (typeof backend !== "undefined")
-                        backend.setDebugMode(value);
-                }
-            }
 
             Item {
                 width: 1
@@ -789,12 +879,13 @@ Item {
                     width: 120
                     height: 40
                     radius: Theme.buttonRadius
-                    color: saveMouseArea.pressed ? Qt.darker(Theme.successColor, 1.2) : Theme.successColor
+                    color: saveMouseArea.pressed ? Qt.darker("#2A5F8F", 1.2) : "#2A5F8F"
 
                     Text {
                         anchors.centerIn: parent
                         text: "Save"
                         font.pixelSize: Theme.fontSizeMedium
+                        font.family: Theme.fontFamily
                         color: "#FFFFFF"
                     }
 
@@ -812,12 +903,13 @@ Item {
                     width: 120
                     height: 40
                     radius: Theme.buttonRadius
-                    color: resetMouseArea.pressed ? Qt.darker(Theme.errorColor, 1.2) : Theme.errorColor
+                    color: resetMouseArea.pressed ? Qt.darker("#3A3A4A", 1.2) : "#3A3A4A"
 
                     Text {
                         anchors.centerIn: parent
                         text: "Reset"
                         font.pixelSize: Theme.fontSizeMedium
+                        font.family: Theme.fontFamily
                         color: "#FFFFFF"
                     }
 
